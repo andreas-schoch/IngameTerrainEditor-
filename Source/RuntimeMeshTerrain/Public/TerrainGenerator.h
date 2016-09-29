@@ -83,9 +83,8 @@ class RUNTIMEMESHTERRAIN_API ATerrainGenerator : public AActor
 	
 public:
 	// Main function to generate Mesh
-	UFUNCTION(BlueprintCallable, Category = "ProceduralMeshGeneration")
 	void GenerateMesh();
-
+	void GenerateMeshTimed();
 
 	// Getters 
 	UFUNCTION(BlueprintPure, Category = "ProceduralMeshGeneration")
@@ -118,7 +117,10 @@ public:
 	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
 	bool bUseUpdateQueue = true;
 	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
+	bool bUseTimerforGeneration = true;
+	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
 	float CreateSectionTimerDelay = 0.1;
+
 
 	// class that acts as a mesh section
 	UPROPERTY(EditDefaultsOnly, Category = "ProceduralMeshGeneration")
@@ -131,11 +133,16 @@ private:
 	virtual void Tick(float DeltaSeconds) override;
 
 	void InitializeProperties();
+	
 	void FillIndexBuffer();
+	void FillIndexBufferTimed();
+
 	void AddBorderVerticesToSectionProperties();
 
 	void FillGlobalProperties();
-	void CopyLandscapeHeightBelow(FVector& Coordinates, FVector& Normal);
+	void FillGlobalPropertiesTimed();
+
+	inline void CopyLandscapeHeightBelow(FVector& Coordinates, FVector& Normal);
 
 	void SpawnSectionActors();
 	void SpawnSectionActorsWithTimer();
@@ -157,8 +164,12 @@ private:
 	TArray<int32> SectionCreateQueue;
 	TArray<ATerrainSection*> SectionActors;
 
+	
 	FTimerHandle SectionCreateTimerHandle;
 	int32 SectionIndexIter = 0;
+	int32 IndexBufferIter = 0;
+	int32 GlobalXIter = 0;
+
 	
 	
 };

@@ -32,6 +32,8 @@ private:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
 
+	void SetVisibility();
+
 	UPROPERTY(VisibleAnywhere, Category = "Components")
 	URuntimeMeshComponent* RuntimeMeshComponent = nullptr;
 
@@ -42,6 +44,9 @@ private:
 
 
 	APlayerController* PlayerControllerReference = nullptr;
+
+	FTimerHandle VisibilityTimerHandle;
+
 
 	
 	

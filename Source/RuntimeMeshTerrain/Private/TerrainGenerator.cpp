@@ -27,7 +27,7 @@ void ATerrainGenerator::OnConstruction(const FTransform & Transform)
 void ATerrainGenerator::BeginPlay()
 {
 	Super::BeginPlay();
-	GenerateMesh();
+	bUseTimerforGeneration ? GenerateMeshTimed() : GenerateMesh();
 }
 
 
@@ -47,18 +47,29 @@ void ATerrainGenerator::Tick(float DeltaTime)
 }
 
 
-// Main Function 
+// Main Function (freezes gamethread with big terrains)
 void ATerrainGenerator::GenerateMesh()
 {
 	InitializeProperties();
 	FillGlobalProperties();
-	SpawnSectionActorsWithTimer();
+	FillIndexBuffer();
+	SpawnSectionActors();
+}
+
+
+// Main Function alternative (no gamethread freezing but takes some time too)
+void ATerrainGenerator::GenerateMeshTimed()
+{
+	InitializeProperties();
+	FillGlobalPropertiesTimed();
 }
 
 
 void ATerrainGenerator::InitializeProperties()
 {
-	FillIndexBuffer();
+	//FillIndexBuffer();
+	int32 ArraySizeGlobal = SectionXY * SectionXY * ComponentXY * ComponentXY;
+	IndexBuffer.SetNum(ArraySizeGlobal, true);
 
 	int32 NumOfSections = ComponentXY * ComponentXY;
 	SectionActors.SetNum(NumOfSections, true);
@@ -86,29 +97,68 @@ void ATerrainGenerator::FillIndexBuffer()
 {
 	int32 ArraySizeGlobal = SectionXY * SectionXY * ComponentXY * ComponentXY;
 	IndexBuffer.SetNum(ArraySizeGlobal, true);
+
 	int32 Iterator = 0;
 	for (int XComp = 0; XComp < ComponentXY; XComp++)
 	{
 		for (int YComp = 0; YComp < ComponentXY; YComp++)
 		{
-			int32 GlobalXYVerts = (SectionXY - 1) * ComponentXY + 1;
-			int32 ToAddWhenIteratingComponentX = GlobalXYVerts * (SectionXY - 1);
-			int32 ToAddWhenIteratingComponentY = (SectionXY - 1);
-			int32 SectionRoot = (ToAddWhenIteratingComponentX * XComp) + (ToAddWhenIteratingComponentY * YComp);
+			int32 QuadsPerSide = SectionXY - 1;
+			int32 GlobalXYVerts = QuadsPerSide * ComponentXY + 1;
+			int32 SectionRoot = ((GlobalXYVerts * QuadsPerSide) * XComp) + (QuadsPerSide * YComp);
 			for (int XSection = 0; XSection < SectionXY; XSection++)
 			{
 				for (int YSection = 0; YSection < SectionXY; YSection++)
 				{
-					int32 ToAddWhenIteratingSectionX = GlobalXYVerts;
-					int32 ToAddWhenIteratingSectionY = YSection;
-					int32 IndexToAdd = ToAddWhenIteratingSectionX * XSection + ToAddWhenIteratingSectionY;
+					int32 IndexToAdd = GlobalXYVerts * XSection + YSection;
 					int32 IndexTotal = SectionRoot + IndexToAdd;
+
 					IndexBuffer[Iterator] = IndexTotal;
 					Iterator++;
 				}
 			}
 		}
 	}
+}
+
+
+void ATerrainGenerator::FillIndexBufferTimed()
+{
+	// Fill Index Buffer (Partially)
+	int32 XComp = SectionIndexIter / ComponentXY;
+	int32 YComp = SectionIndexIter % ComponentXY;
+
+	int32 QuadsPerSide = SectionXY - 1;
+	int32 GlobalXYVerts = QuadsPerSide * ComponentXY + 1;
+	int32 SectionRoot = ((GlobalXYVerts * QuadsPerSide) * XComp) + (QuadsPerSide * YComp);
+	for (int XSection = 0; XSection < SectionXY; XSection++)
+	{
+		for (int YSection = 0; YSection < SectionXY; YSection++)
+		{
+			int32 IndexToAdd = GlobalXYVerts * XSection + YSection;
+			int32 IndexTotal = SectionRoot + IndexToAdd;
+			
+			IndexBuffer[IndexBufferIter] = IndexTotal;
+			IndexBufferIter++;
+		}
+	}
+
+	// Spawn TerrainSectionActor
+	SectionActors[SectionIndexIter] = GetWorld()->SpawnActor<ATerrainSection>(
+		ClassToSpawnAsSection,
+		GetActorLocation(),
+		GetActorRotation());
+	SectionActors[SectionIndexIter]->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
+	SectionActors[SectionIndexIter]->InitializeOnSpawn(SectionIndexIter, FVector2D(XComp, YComp), this);
+
+	// Create Section
+	FillSectionVertStruct(SectionIndexIter);
+	SectionActors[SectionIndexIter]->CreateSection();
+
+	// Recursive function call with a timer to prevent freezing of the gamethread
+	SectionIndexIter++;
+	if (SectionIndexIter >= ComponentXY * ComponentXY) { return; }
+	GetWorld()->GetTimerManager().SetTimer(SectionCreateTimerHandle, this, &ATerrainGenerator::FillIndexBufferTimed, CreateSectionTimerDelay, false);
 }
 
 
@@ -144,10 +194,10 @@ void ATerrainGenerator::AddBorderVerticesToSectionProperties()
 
 void ATerrainGenerator::FillGlobalProperties()
 {
+	int32 VertsPerSide = (ComponentXY * SectionXY - (ComponentXY - 1));
 	// Get GlobalProperties Vertex & UV Coordinates
 	for (int i = 0; i < GlobalProperties.Vertices.Num(); i++)
 	{
-		int32 VertsPerSide = (ComponentXY*SectionXY - (ComponentXY - 1));
 		int32 X = i / VertsPerSide;
 		int32 Y = i % VertsPerSide;
 
@@ -160,6 +210,38 @@ void ATerrainGenerator::FillGlobalProperties()
 		CopyLandscapeHeightBelow(OUT VertCoords, OUT GlobalProperties.Normals[i]);
 		GlobalProperties.Vertices[i] = VertCoords;
 	}
+}
+
+
+void ATerrainGenerator::FillGlobalPropertiesTimed()
+{
+	int32 MeshVertsPerSide = SectionXY * ComponentXY - (ComponentXY - 1);
+	int32 TotalNumOfVerts = MeshVertsPerSide * MeshVertsPerSide;
+
+	// Get GlobalProperties Vertex & UV Coordinates
+	for (int i = 0; i < MeshVertsPerSide; i++)
+	{
+		int32 X = GlobalXIter;
+		int32 Y = i;
+		int32 PropertiesIndex = X * MeshVertsPerSide + Y;
+		if (!GlobalProperties.UV.IsValidIndex(PropertiesIndex)) { UE_LOG(LogTemp, Error, TEXT("IndexNotValid")); }
+
+		// UV Coordinates
+		FVector2D IterUV = FVector2D(X, Y);
+		GlobalProperties.UV[PropertiesIndex] = IterUV;
+
+		// Vertex Coordinates & Normals
+		FVector VertCoords = FVector(X, Y, 0) * QuadSize;
+		CopyLandscapeHeightBelow(OUT VertCoords, OUT GlobalProperties.Normals[PropertiesIndex]);
+		GlobalProperties.Vertices[PropertiesIndex] = VertCoords;
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("GlobalPropertiesPercentFilled: %f% "), ((float)GlobalXIter/ (float)MeshVertsPerSide) *100.f);
+
+	// Recursive function call with a timer to prevent freezing of the gamethread
+	GlobalXIter++;
+	if (GlobalXIter + 1 > MeshVertsPerSide) { FillIndexBufferTimed(); return; }
+	GetWorld()->GetTimerManager().SetTimer(SectionCreateTimerHandle, this, &ATerrainGenerator::FillGlobalPropertiesTimed, CreateSectionTimerDelay,false);
 }
 
 
@@ -232,7 +314,7 @@ void ATerrainGenerator::SpawnSectionActorsWithTimer()
 	
 	// recursive function call
 	SectionIndexIter++;
-	if (SectionIndexIter + 1 >= ComponentXY * ComponentXY) { return; }
+	if (SectionIndexIter + 1 > ComponentXY * ComponentXY) { return; }
 	GetWorld()->GetTimerManager().SetTimer(SectionCreateTimerHandle, this, &ATerrainGenerator::SpawnSectionActorsWithTimer, CreateSectionTimerDelay, false);
 }
 
@@ -245,6 +327,7 @@ void ATerrainGenerator::FillSectionVertStruct(int32 SectionIndex)
 	{
 		if (SectionProperties.Vertices.IsValidIndex(i))
 		{
+			if (!IndexBuffer.IsValidIndex(i + IndexStart)) { return; }
 			int32 Index = IndexBuffer[i + IndexStart];
 			SectionProperties.Vertices[i]	= GlobalProperties.Vertices[Index];;
 			SectionProperties.Normals[i]	= GlobalProperties.Normals[Index];
@@ -285,8 +368,11 @@ void ATerrainGenerator::MakeCrater(int32 SectionIndex, FVector HitLocation)
 			if (DistanceFromCenter > HitRadius) { continue; }
 
 			// update Vertex location and normal
-			GlobalProperties.Vertices[CurrentIndex] -= FVector(0, 0, 100);
-			GlobalProperties.Normals[CurrentIndex] = FVector(0, 0.5, 0.5);
+			int32 MaxDig = QuadSize * HitRadius;
+			float DigFalloff = DistanceFromCenter / HitRadius;
+			float Test = FMath::Lerp(MaxDig, 0, DigFalloff);
+			GlobalProperties.Vertices[CurrentIndex] -= FVector(0, 0, Test);
+			GlobalProperties.Normals[CurrentIndex] = FVector(0, 0.5, 0.5); // Temporary
 
 			FVector SectionCoordinates = FVector(SectionIndex / (ComponentXY), SectionIndex % (ComponentXY), 0);
 			FVector SectionVertCoords = CurrentVertCoords - (SectionCoordinates * SectionXY - SectionCoordinates);

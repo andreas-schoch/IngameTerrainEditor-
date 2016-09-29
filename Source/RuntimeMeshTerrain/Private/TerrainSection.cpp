@@ -8,7 +8,7 @@
 
 ATerrainSection::ATerrainSection()
 {
-	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bCanEverTick = false;
 	// Create a RuntimeMeshComponent and make it the root
 	RuntimeMeshComponent = CreateDefaultSubobject<URuntimeMeshComponent>(TEXT("RuntimeMeshComponent"));
 	RootComponent = RuntimeMeshComponent;
@@ -19,6 +19,8 @@ void ATerrainSection::BeginPlay()
 {
 	Super::BeginPlay();
 	RuntimeMeshComponent->OnComponentHit.AddDynamic(this, &ATerrainSection::OnHit);
+	GetWorld()->GetTimerManager().SetTimer(VisibilityTimerHandle, this, &ATerrainSection::SetVisibility, 0.1, true, 0.3);
+
 }
 
 
@@ -39,7 +41,11 @@ void ATerrainSection::InitializeOnSpawn(int32 SectionIndex, FVector2D ComponentC
 void ATerrainSection::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+}
 
+
+void ATerrainSection::SetVisibility()
+{
 	// Set Visibility
 	if (!ensure(PlayerControllerReference)) { return; }
 	auto PlayerPawnWorldLocation = PlayerControllerReference->GetPawn()->GetActorLocation();
@@ -49,11 +55,13 @@ void ATerrainSection::Tick(float DeltaTime)
 	if (DistanceToPlayerPawn2D > OwningTerrain->SectionVisibilityRange && RuntimeMeshComponent->IsVisible())
 	{
 		RuntimeMeshComponent->SetVisibility(false);
+		RuntimeMeshComponent->SetMeshSectionCollisionEnabled(0, false);
+
 	}
 	else if (DistanceToPlayerPawn2D < OwningTerrain->SectionVisibilityRange && !RuntimeMeshComponent->IsVisible())
 	{
 		RuntimeMeshComponent->SetVisibility(true);
-		//RuntimeMeshComponent->SetMeshSectionCollisionEnabled(0, true);
+		RuntimeMeshComponent->SetMeshSectionCollisionEnabled(0, true);
 	}
 }
 
@@ -93,11 +101,8 @@ void ATerrainSection::OnHit(UPrimitiveComponent* HitComponent, AActor * OtherAct
 // Called from Terrain Generator after receiving update request
 void ATerrainSection::UpdateSection()
 {
-	//auto SectionProperties = OwningTerrain->GetSectionProperties();
 	TArray<FRuntimeMeshTangent> Tangents;
-	//FSectionProperties SectionPropertiesPtr = OwningTerrain->SectionProperties;
 	FSectionProperties* SectionPropertiesPtr = &OwningTerrain->SectionProperties;
-
 	RuntimeMeshComponent->UpdateMeshSection(
 		0,
 		SectionPropertiesPtr->Vertices,
