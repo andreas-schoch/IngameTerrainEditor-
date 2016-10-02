@@ -3,12 +3,10 @@
 #pragma once
 
 #include "GameFramework/Actor.h"
+#include "TerrainGenerator.h" //TODO move ESculptEnum to standalone class to prevent having to include generator everywhere
 #include "TerrainSection.generated.h"
 
-
-class ATerrainGenerator;
 class URuntimeMeshComponent;
-
 
 UCLASS()
 class RUNTIMEMESHTERRAIN_API ATerrainSection : public AActor
@@ -27,11 +25,14 @@ public:
 	UFUNCTION()
 	void OnHit(UPrimitiveComponent* HitComponent, AActor * OtherActor, UPrimitiveComponent * OtherComp, FVector NormalImpulse, const FHitResult & Hit);
 
+	UFUNCTION(BlueprintCallable, Category = "ProceduralMeshGeneration")
+	void RequestSculpting(FVector HitLocation, ESculptMode SculptMode, float ToolStrength, float ToolRadius, bool bUseUpdateQueue);
+
+	TArray<FVector*> SectionVerticesPtr;
+	TIndirectArray<FVector*> SectionVerticesPtr2; // TODO test if performance benefits from storing a ptr to all verts needed from globalproperties
 
 private:
 	virtual void BeginPlay() override;
-	virtual void Tick(float DeltaSeconds) override;
-
 	void SetVisibility();
 
 	UPROPERTY(VisibleAnywhere, Category = "Components")
@@ -39,15 +40,11 @@ private:
 
 	ATerrainGenerator* OwningTerrain = nullptr;
 
-	int32 SectionIndexLocal = 0;
-	TArray<int32> IndexBufferLocal;
-
-
 	APlayerController* PlayerControllerReference = nullptr;
 
+	int32 SectionIndexLocal = 0;
+
+	TArray<int32> IndexBufferLocal;
+
 	FTimerHandle VisibilityTimerHandle;
-
-
-	
-	
 };

@@ -25,20 +25,29 @@ enum class EVertPositionInsideSection : uint8
 };
 
 
+UENUM(BlueprintType)
+enum class ESculptMode : uint8
+{
+	ST_Sculpt		UMETA(DisplayName = "Sculpt"),
+	ST_Flatten		UMETA(DisplayName = "Flatten"),
+	ST_Smooth		UMETA(DisplayName = "Smooth"),
+};
+
+
 // Struct that constains global Vertex information
 USTRUCT(BlueprintType)
 struct FGlobalProperties
 {
 	GENERATED_USTRUCT_BODY()
 
-		UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
-		TArray<FVector> Vertices;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
+	TArray<FVector> Vertices;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
-		TArray<FVector2D> UV;
+	TArray<FVector2D> UV;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
-		TArray<FVector> Normals;
+	TArray<FVector> Normals;
 
 	FGlobalProperties()
 	{
@@ -52,23 +61,23 @@ struct FSectionProperties
 {
 	GENERATED_USTRUCT_BODY()
 
-		UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
-		TArray<FVector> Vertices;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
+	TArray<FVector> Vertices;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
-		TArray<FVector2D> UV;
+	TArray<FVector2D> UV;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
-		TArray<FVector> Normals;
+	TArray<FVector> Normals;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
-		TArray<FColor> VertexColors;
+	TArray<FColor> VertexColors;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
-		TArray<int32> Triangles;
+	TArray<int32> Triangles;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
-		TArray<EVertPositionInsideSection> PositionInsideSection;
+	TArray<EVertPositionInsideSection> PositionInsideSection;
 
 	FSectionProperties()
 	{
@@ -86,6 +95,8 @@ public:
 	void GenerateMesh();
 	void GenerateMeshTimed();
 
+
+
 	// Getters 
 	UFUNCTION(BlueprintPure, Category = "ProceduralMeshGeneration")
 	int32 GetSectionXY() const { return SectionXY; }
@@ -95,9 +106,10 @@ public:
 	int32 GetComponentXY() const { return ComponentXY; }
 
 	// called from section actor on projectile hit
-	void SectionRequestsUpdate(int32 SectionIndex, FVector HitLocation);
+	void SectionRequestsUpdate(int32 SectionIndex, FVector HitLocation, ESculptMode SculptMode, float ToolStrength, float ToolRadius, bool bUseUpdateQueue);
 	void SectionUpdateFinished();
 
+	//UPROPERTY(VisibleAnywhere, Category = "ProceduralMeshGeneration")
 	FSectionProperties SectionProperties;
 
 	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
@@ -112,10 +124,10 @@ public:
 	float LineTraceHeightOffset = 100;
 	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
 	float SectionVisibilityRange = 80000;
-	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
-	int32 HitRadius = 2;
-	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
-	bool bUseUpdateQueue = true;
+	//UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
+	//int32 HitRadius = 2;
+	//UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
+	//bool bUseUpdateQueue = true;
 	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
 	bool bUseTimerforGeneration = true;
 	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
@@ -133,25 +145,17 @@ private:
 	virtual void Tick(float DeltaSeconds) override;
 
 	void InitializeProperties();
-	
 	void FillIndexBuffer();
-	void FillIndexBufferTimed();
-
 	void AddBorderVerticesToSectionProperties();
-
 	void FillGlobalProperties();
 	void FillGlobalPropertiesTimed();
-
 	inline void CopyLandscapeHeightBelow(FVector& Coordinates, FVector& Normal);
 
 	void SpawnSectionActors();
-	void SpawnSectionActorsWithTimer();
 	void FillSectionVertStruct(int32 SectionIndex);
-	//void FillIndexBufferSection(int32 XComp, int32 YComp);
+	void MakeCrater(int32 SectionIndex, FVector HitLocation, ESculptMode SculptMode, float ToolStrength, float ToolRadius, bool bUseUpdateQueue);
 
-	void MakeCrater(int32 SectionIndex, FVector HitLocation);
-
-
+	void FillIndexBufferTimed();
 
 	UPROPERTY(VisibleAnywhere, Category = "Components")
 	URuntimeMeshComponent* RuntimeMeshComponent = nullptr;
@@ -169,7 +173,4 @@ private:
 	int32 SectionIndexIter = 0;
 	int32 IndexBufferIter = 0;
 	int32 GlobalXIter = 0;
-
-	
-	
 };

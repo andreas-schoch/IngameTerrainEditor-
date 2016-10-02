@@ -4,7 +4,6 @@
 #include "RuntimeMeshComponent.h" 
 #include "RuntimeMeshLibrary.h"
 #include "Kismet/KismetMathLibrary.h"
-#include "Kismet/KismetSystemLibrary.h" // for BP Linetrace
 #include "TerrainSection.h"
 #include "TerrainGenerator.h"
 
@@ -36,13 +35,13 @@ void ATerrainGenerator::Tick(float DeltaTime)
 	Super::Tick(DeltaTime);
 
 	// check if any sections request to be updated
-	if (SectionUpdateQueue.Num() > 0 && bAllowedToUpdateSection && bUseUpdateQueue)
+	if (SectionUpdateQueue.Num() > 0 && bAllowedToUpdateSection)
 	{
 		bAllowedToUpdateSection = false;
 		if (!SectionActors.IsValidIndex(SectionUpdateQueue[0])) { return; }
 		FillSectionVertStruct(SectionUpdateQueue[0]);
 		SectionActors[SectionUpdateQueue[0]]->UpdateSection();
-		UE_LOG(LogTemp, Warning, TEXT("Updated with UpdateQueue"))
+		//UE_LOG(LogTemp, Warning, TEXT("Updated with UpdateQueue"))
 	}
 }
 
@@ -61,13 +60,12 @@ void ATerrainGenerator::GenerateMesh()
 void ATerrainGenerator::GenerateMeshTimed()
 {
 	InitializeProperties();
-	FillGlobalPropertiesTimed();
+	FillGlobalPropertiesTimed(); // TODO rename
 }
 
 
 void ATerrainGenerator::InitializeProperties()
 {
-	//FillIndexBuffer();
 	int32 ArraySizeGlobal = SectionXY * SectionXY * ComponentXY * ComponentXY;
 	IndexBuffer.SetNum(ArraySizeGlobal, true);
 
@@ -99,12 +97,12 @@ void ATerrainGenerator::FillIndexBuffer()
 	IndexBuffer.SetNum(ArraySizeGlobal, true);
 
 	int32 Iterator = 0;
+	int32 QuadsPerSide = SectionXY - 1;
+	int32 GlobalXYVerts = QuadsPerSide * ComponentXY + 1;
 	for (int XComp = 0; XComp < ComponentXY; XComp++)
 	{
 		for (int YComp = 0; YComp < ComponentXY; YComp++)
 		{
-			int32 QuadsPerSide = SectionXY - 1;
-			int32 GlobalXYVerts = QuadsPerSide * ComponentXY + 1;
 			int32 SectionRoot = ((GlobalXYVerts * QuadsPerSide) * XComp) + (QuadsPerSide * YComp);
 			for (int XSection = 0; XSection < SectionXY; XSection++)
 			{
@@ -112,7 +110,6 @@ void ATerrainGenerator::FillIndexBuffer()
 				{
 					int32 IndexToAdd = GlobalXYVerts * XSection + YSection;
 					int32 IndexTotal = SectionRoot + IndexToAdd;
-
 					IndexBuffer[Iterator] = IndexTotal;
 					Iterator++;
 				}
@@ -124,7 +121,7 @@ void ATerrainGenerator::FillIndexBuffer()
 
 void ATerrainGenerator::FillIndexBufferTimed()
 {
-	// Fill Index Buffer (Partially)
+	// Fill Index Buffer (Partially, then spawn coresponding section)
 	int32 XComp = SectionIndexIter / ComponentXY;
 	int32 YComp = SectionIndexIter % ComponentXY;
 
@@ -137,7 +134,6 @@ void ATerrainGenerator::FillIndexBufferTimed()
 		{
 			int32 IndexToAdd = GlobalXYVerts * XSection + YSection;
 			int32 IndexTotal = SectionRoot + IndexToAdd;
-			
 			IndexBuffer[IndexBufferIter] = IndexTotal;
 			IndexBufferIter++;
 		}
@@ -194,21 +190,20 @@ void ATerrainGenerator::AddBorderVerticesToSectionProperties()
 
 void ATerrainGenerator::FillGlobalProperties()
 {
-	int32 VertsPerSide = (ComponentXY * SectionXY - (ComponentXY - 1));
 	// Get GlobalProperties Vertex & UV Coordinates
-	for (int i = 0; i < GlobalProperties.Vertices.Num(); i++)
+	int32 i = 0;
+	int32 VertsPerSide = (ComponentXY * SectionXY - (ComponentXY - 1));
+	for (int32 X = 0; X < VertsPerSide; X++)
 	{
-		int32 X = i / VertsPerSide;
-		int32 Y = i % VertsPerSide;
-
-		// UV Coordinates
-		FVector2D IterUV = FVector2D(X, Y);
-		GlobalProperties.UV[i] = IterUV;
-
-		// Vertex Coordinates & Normals
-		FVector VertCoords = FVector(X, Y, 0) * QuadSize;
-		CopyLandscapeHeightBelow(OUT VertCoords, OUT GlobalProperties.Normals[i]);
-		GlobalProperties.Vertices[i] = VertCoords;
+		for (int32 Y = 0; Y < VertsPerSide; Y++)
+		{
+			// Set Vertex, UV, Normal
+			FVector VertCoords = FVector(X, Y, 0) * QuadSize;
+			CopyLandscapeHeightBelow(OUT VertCoords, OUT GlobalProperties.Normals[i]);
+			GlobalProperties.Vertices[i] = VertCoords;
+			GlobalProperties.UV[i] = FVector2D(X, Y);
+			i++;
+		}
 	}
 }
 
@@ -226,17 +221,15 @@ void ATerrainGenerator::FillGlobalPropertiesTimed()
 		int32 PropertiesIndex = X * MeshVertsPerSide + Y;
 		if (!GlobalProperties.UV.IsValidIndex(PropertiesIndex)) { UE_LOG(LogTemp, Error, TEXT("IndexNotValid")); }
 
-		// UV Coordinates
-		FVector2D IterUV = FVector2D(X, Y);
-		GlobalProperties.UV[PropertiesIndex] = IterUV;
 
-		// Vertex Coordinates & Normals
+		// Set Vertex, UV, Normal
 		FVector VertCoords = FVector(X, Y, 0) * QuadSize;
 		CopyLandscapeHeightBelow(OUT VertCoords, OUT GlobalProperties.Normals[PropertiesIndex]);
 		GlobalProperties.Vertices[PropertiesIndex] = VertCoords;
+		GlobalProperties.UV[PropertiesIndex] = FVector2D(X, Y);
 	}
 
-	UE_LOG(LogTemp, Warning, TEXT("GlobalPropertiesPercentFilled: %f% "), ((float)GlobalXIter/ (float)MeshVertsPerSide) *100.f);
+	UE_LOG(LogTemp, Warning, TEXT("GlobalPropertiesPercentFilled: %f % "), ((float)GlobalXIter/ (float)MeshVertsPerSide) * 100.f);
 
 	// Recursive function call with a timer to prevent freezing of the gamethread
 	GlobalXIter++;
@@ -248,19 +241,10 @@ void ATerrainGenerator::FillGlobalPropertiesTimed()
 void ATerrainGenerator::CopyLandscapeHeightBelow(FVector &Coordinates, FVector& Normal)
 {
 	FHitResult Hit;
-	TArray<AActor*> ToIgnore;
-	UGameplayStatics::GetAllActorsOfClass(GetWorld(), Cast<APawn>(GetWorld()->GetFirstPlayerController()->GetPawn())->GetClass(), OUT ToIgnore);
-
-	UKismetSystemLibrary::LineTraceSingle_NEW(
-		this,
-		Coordinates + GetActorLocation(),
-		Coordinates + GetActorLocation() - FVector(0, 0, LineTraceLength),
-		UEngineTypes::ConvertToTraceType(ECC_WorldStatic),
-		false,
-		ToIgnore,
-		EDrawDebugTrace::None,
-		OUT Hit,
-		true);
+	FVector Start = Coordinates + GetActorLocation();
+	FVector End = Start - FVector(0, 0, LineTraceLength);
+	
+	GetWorld()->LineTraceSingleByChannel(OUT Hit, Start, End, ECollisionChannel::ECC_WorldStatic);
 
 	float LineTraceHeight = Hit.Location.Z - GetActorLocation().Z + LineTraceHeightOffset;
 	Coordinates = FVector(Coordinates.X, Coordinates.Y, LineTraceHeight);
@@ -294,31 +278,6 @@ void ATerrainGenerator::SpawnSectionActors()
 }
 
 
-void ATerrainGenerator::SpawnSectionActorsWithTimer()
-{
-	if (!ClassToSpawnAsSection) { UE_LOG(LogTemp, Error, TEXT("'ClassToSpawnAsSection' undeclared in Terrain Generator BP")); return; }
-
-	int32 X = SectionIndexIter / ComponentXY;
-	int32 Y = SectionIndexIter % ComponentXY;
-	
-	SectionActors[SectionIndexIter] = GetWorld()->SpawnActor<ATerrainSection>(
-		ClassToSpawnAsSection,
-		GetActorLocation(),
-		GetActorRotation());
-	SectionActors[SectionIndexIter]->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
-	SectionActors[SectionIndexIter]->InitializeOnSpawn(SectionIndexIter, FVector2D(X, Y), this);
-
-	// Fill SectionProperties and create section inside SectionActor
-	FillSectionVertStruct(SectionIndexIter);
-	SectionActors[SectionIndexIter]->CreateSection();
-	
-	// recursive function call
-	SectionIndexIter++;
-	if (SectionIndexIter + 1 > ComponentXY * ComponentXY) { return; }
-	GetWorld()->GetTimerManager().SetTimer(SectionCreateTimerHandle, this, &ATerrainGenerator::SpawnSectionActorsWithTimer, CreateSectionTimerDelay, false);
-}
-
-
 void ATerrainGenerator::FillSectionVertStruct(int32 SectionIndex)
 {
 	int32 IndexStart = SectionXY * SectionXY * SectionIndex;
@@ -337,50 +296,48 @@ void ATerrainGenerator::FillSectionVertStruct(int32 SectionIndex)
 }
 
 
-void ATerrainGenerator::SectionRequestsUpdate(int32 SectionIndex, FVector HitLocation)
+void ATerrainGenerator::SectionRequestsUpdate(int32 SectionIndex, FVector HitLocation, ESculptMode SculptMode, float ToolStrength, float ToolRadius, bool bUseUpdateQueue)
 {
-	MakeCrater(SectionIndex, HitLocation);
-	//if (!SectionUpdateQueue.Contains(SectionIndex)) { SectionUpdateQueue.Add(SectionIndex); }		// TODO add neighbour section if border vert is hit
+	MakeCrater(SectionIndex, HitLocation, SculptMode, ToolStrength, ToolRadius, bUseUpdateQueue);
 }
 
 
-void ATerrainGenerator::MakeCrater(int32 SectionIndex, FVector HitLocation)
+void ATerrainGenerator::MakeCrater(int32 SectionIndex, FVector HitLocation, ESculptMode SculptMode, float ToolStrength, float ToolRadius, bool bUseUpdateQueue)
 {
-	// Get Coordinates of hit Vertex
-	// FVector RelativeHitLocation = (HitLocation - GetActorLocation());
-	FVector CenterCoordinates = FVector(FMath::RoundToInt((HitLocation - GetActorLocation()).X / QuadSize), FMath::RoundToInt((HitLocation - GetActorLocation()).Y / QuadSize), 0);
-	int32 VertsPerSide = (SectionXY - 1) * ComponentXY + 1; // (SectionXY * ComponentXY) - (ComponentXY - 1);
-	int32 CenterIndex = CenterCoordinates.X * VertsPerSide + CenterCoordinates.Y;
+	UE_LOG(LogTemp, Warning, TEXT("HELLLO"));
 	TArray<int32> AffectedSections;
+	FVector RelativeHitLocation = (HitLocation - GetActorLocation());
+	FVector CenterCoordinates = FVector(FMath::RoundToInt(RelativeHitLocation.X / QuadSize), FMath::RoundToInt(RelativeHitLocation.Y / QuadSize), 0);
+	int32 VertsPerSide = ((SectionXY - 1) * ComponentXY + 1);
+	int32 CenterIndex = CenterCoordinates.X * VertsPerSide + CenterCoordinates.Y;
+	FVector SectionCoordinates = FVector(SectionIndex / (ComponentXY), SectionIndex % (ComponentXY), 0);
+	int32 MaxDig = 1000 * ToolStrength;
+	int32 RadiusInVerts = ToolRadius / QuadSize;
 
 	// Modify Verts around impact to make a crater
-	for (int32 X = -HitRadius; X <= HitRadius; X++)
+	for (int32 X = -RadiusInVerts; X <= RadiusInVerts; X++)
 	{
-		for (int32 Y = -HitRadius; Y <= HitRadius; Y++)
+		for (int32 Y = -RadiusInVerts; Y <= RadiusInVerts; Y++)
 		{
 			// Continue loop if Vert doesn't exist
 			int32 CurrentIndex = CenterIndex + (X * VertsPerSide) + Y;
 			if (!GlobalProperties.Vertices.IsValidIndex(CurrentIndex)) { continue; }
-
 			// Continue if not in radius
 			FVector CurrentVertCoords = FVector(FMath::RoundToInt(GlobalProperties.Vertices[CurrentIndex].X / QuadSize), FMath::RoundToInt(GlobalProperties.Vertices[CurrentIndex].Y / QuadSize), 0);
 			float DistanceFromCenter = FVector::Dist(CenterCoordinates, CurrentVertCoords);
-			if (DistanceFromCenter > HitRadius) { continue; }
+			if (DistanceFromCenter > RadiusInVerts) { continue; }
 
 			// update Vertex location and normal
-			int32 MaxDig = QuadSize * HitRadius;
-			float DigFalloff = DistanceFromCenter / HitRadius;
+			float DigFalloff = DistanceFromCenter / RadiusInVerts;
 			float Test = FMath::Lerp(MaxDig, 0, DigFalloff);
 			GlobalProperties.Vertices[CurrentIndex] -= FVector(0, 0, Test);
 			GlobalProperties.Normals[CurrentIndex] = FVector(0, 0.5, 0.5); // Temporary
 
-			FVector SectionCoordinates = FVector(SectionIndex / (ComponentXY), SectionIndex % (ComponentXY), 0);
 			FVector SectionVertCoords = CurrentVertCoords - (SectionCoordinates * SectionXY - SectionCoordinates);
 			int32 SectionVertIndex = SectionVertCoords.X * SectionXY + SectionVertCoords.Y;
 
 			if (SectionVertCoords.X > SectionXY - 1 || SectionVertCoords.X < 0 || SectionVertCoords.Y > SectionXY - 1 || SectionVertCoords.Y < 0) { continue; }
 			if (!SectionProperties.PositionInsideSection.IsValidIndex(SectionVertIndex)) { continue; }
-			//SectionProperties.VertexColors[SectionVertIndex] = (FColor(0, 0, 155, 0.1));
 
 			int32 NeighbourSection;
 			switch (SectionProperties.PositionInsideSection[SectionVertIndex])
@@ -470,7 +427,7 @@ void ATerrainGenerator::MakeCrater(int32 SectionIndex, FVector HitLocation)
 			FillSectionVertStruct(Iter);
 			SectionActors[Iter]->UpdateSection();
 		}
-		UE_LOG(LogTemp, Warning, TEXT("SECTION TO UPDATE: %i"), Iter);
+		//UE_LOG(LogTemp, Warning, TEXT("SECTION TO UPDATE: %i"), Iter);
 	}
 }
 
