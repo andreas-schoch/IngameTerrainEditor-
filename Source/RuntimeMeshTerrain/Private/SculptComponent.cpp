@@ -1,4 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+// Copyright 2016 Andreas Schoch (aka Minaosis). All Rights Reserved.
 
 #include "RuntimeMeshTerrain.h"
 #include "TerrainSection.h"
@@ -17,50 +17,77 @@ void USculptComponent::BeginPlay()
 	Super::BeginPlay();
 }
 
-
 void USculptComponent::TickComponent( float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction )
 {
 	Super::TickComponent( DeltaTime, TickType, ThisTickFunction );
+
+	FHitResult Hit;
+	if (GetHitResult(OUT Hit))
+	{
+		CurrentSculptLocation = Hit.Location;
+	}
 }
 
 
 void USculptComponent::SculptStart(UCameraComponent* Camera)
 {
 	OwnerCamera = Camera;
+	SculptInput = ESculptInput::ST_Started;
 	GetWorld()->GetTimerManager().SetTimer(SculptTimerHandle, this, &USculptComponent::Sculpt, GetWorld()->DeltaTimeSeconds, true);
 }
 
 
 void USculptComponent::SculptStop()
 {
+	SculptInput = ESculptInput::ST_Stopped;
 	GetWorld()->GetTimerManager().PauseTimer(SculptTimerHandle);
+	Sculpt();
 }
 
 
 void USculptComponent::Sculpt()
 {
 	FHitResult Hit;
-	TArray<AActor*> ToIgnore;
-	FVector TraceStart = OwnerCamera->GetComponentLocation();
-	FVector TraceEnd = TraceStart + (OwnerCamera->GetForwardVector() * 100000); // TODO add under mouse option
-	UKismetSystemLibrary::LineTraceSingle_NEW(
-		this,
-		TraceStart,
-		TraceEnd,
-		UEngineTypes::ConvertToTraceType(ECC_WorldStatic),
-		false,
-		ToIgnore,
-		EDrawDebugTrace::ForOneFrame,
-		OUT Hit,
-		true);
+	if (!GetHitResult(OUT Hit)) { return; }
+	if (InSleepDistance(Hit.Location) && (SculptInput != ESculptInput::ST_Stopped)) { return; }
 
-	// only send sculpt request if distance greater than xxx TODO remove magic number
-	FVector2D HitLocation2D = FVector2D(Hit.Location.X, Hit.Location.Y);
-	if (FVector2D::Distance(LastSculptLocation2D, HitLocation2D) < 300) { return; }
-	LastSculptLocation2D = HitLocation2D;
-
-	// Send Sculpt request to hit section
+	// Cast to owner of hit section
 	ATerrainSection* HitSection = dynamic_cast<ATerrainSection*>(Hit.GetActor());
-	if (!ensure(HitSection)) { return; }
-	HitSection->RequestSculpting(Hit.Location, SculptMode, ToolStrength, SculptRadius, bUseQueueToUpdate);
+	if (!HitSection) { return; }
+
+	if (SculptInput == ESculptInput::ST_Started) 
+	{ 
+		StartLocation = Hit.Location - HitSection->GetActorLocation(); 
+		HitSection->RequestSculpting(SculptSettings, Hit.Location, SculptInput, StartLocation);
+		SculptInput = ESculptInput::ST_Ongoing;
+	}
+	else
+	{
+		HitSection->RequestSculpting(SculptSettings, Hit.Location, SculptInput, StartLocation);
+	}
+}
+
+
+bool USculptComponent::GetHitResult(FHitResult &Hit)
+{
+	if (bUseMouseMode)
+	{
+		GetWorld()->GetFirstPlayerController()->GetHitResultUnderCursor(ECollisionChannel::ECC_WorldStatic, true, OUT Hit); // TODO get controller through owner reference
+	}
+	else if (OwnerCamera)
+	{
+		FVector Start = OwnerCamera->GetComponentLocation();
+		FVector End = Start + (OwnerCamera->GetForwardVector() * InteractionDistance);
+		GetWorld()->LineTraceSingleByChannel(OUT Hit, Start, End, ECollisionChannel::ECC_WorldStatic);
+	}
+	return Hit.bBlockingHit;
+}
+
+
+bool USculptComponent::InSleepDistance(FVector CurrentLocation)
+{
+	CurrentLocation *= FVector(1, 1, 1);
+	if (FVector::Dist(LastLocation, CurrentLocation) < SleepDistance) { return true; }
+	LastLocation =  CurrentLocation;
+	return false;
 }

@@ -1,12 +1,14 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+// Copyright 2016 Andreas Schoch (aka Minaosis). All Rights Reserved.
 
 #pragma once
 
 #include "GameFramework/Actor.h"
-#include "TerrainGenerator.h" //TODO move ESculptEnum to standalone class to prevent having to include generator everywhere
+#include "TerrainEditorStuff.h"
 #include "TerrainSection.generated.h"
 
 class URuntimeMeshComponent;
+class UProceduralMeshComponent;
+class ATerrainGenerator;
 
 UCLASS()
 class RUNTIMEMESHTERRAIN_API ATerrainSection : public AActor
@@ -15,21 +17,17 @@ class RUNTIMEMESHTERRAIN_API ATerrainSection : public AActor
 	
 public:	
 	ATerrainSection();
-
 	void InitializeOnSpawn(int32 SectionIndex, FVector2D ComponentCoordinates, ATerrainGenerator* Terrain);
 	void CreateSection();
 	void UpdateSection();
 	FVector2D SectionCoordinates;
 	FVector2D SectionCenterWorldLocation2D;
 
-	UFUNCTION()
-	void OnHit(UPrimitiveComponent* HitComponent, AActor * OtherActor, UPrimitiveComponent * OtherComp, FVector NormalImpulse, const FHitResult & Hit);
+	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
+	bool bUseRuntimeMeshComponent = true;
 
 	UFUNCTION(BlueprintCallable, Category = "ProceduralMeshGeneration")
-	void RequestSculpting(FVector HitLocation, ESculptMode SculptMode, float ToolStrength, float ToolRadius, bool bUseUpdateQueue);
-
-	TArray<FVector*> SectionVerticesPtr;
-	TIndirectArray<FVector*> SectionVerticesPtr2; // TODO test if performance benefits from storing a ptr to all verts needed from globalproperties
+	void RequestSculpting(FSculptSettings SculptSettings, FVector HitLocation, ESculptInput SculptInput, FVector StartLocation);
 
 private:
 	virtual void BeginPlay() override;
@@ -37,6 +35,9 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category = "Components")
 	URuntimeMeshComponent* RuntimeMeshComponent = nullptr;
+
+	UPROPERTY(VisibleAnywhere, Category = "Components")
+	UProceduralMeshComponent* ProceduralMeshComponent = nullptr;
 
 	ATerrainGenerator* OwningTerrain = nullptr;
 

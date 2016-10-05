@@ -1,9 +1,9 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+// Copyright 2016 Andreas Schoch (aka Minaosis). All Rights Reserved.
 
 #pragma once
 
 #include "Components/ActorComponent.h"
-#include "TerrainGenerator.h"
+#include "TerrainEditorStuff.h"
 #include "SculptComponent.generated.h"
 
 
@@ -18,36 +18,53 @@ public:
 	virtual void BeginPlay() override;
 	virtual void TickComponent( float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction ) override;
 
-	void Sculpt();
+	// starts sculpting action till it gets stoped by "SculptStop"
+	UFUNCTION(BlueprintCallable, Category = "Health")
+	void SculptStart(UCameraComponent* Camera);
 
+	// Stops sculpting action
+	UFUNCTION(BlueprintCallable, Category = "Health")
+	void SculptStop();
 
 
 protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sculpting")
-	ESculptMode SculptMode;
+	FSculptSettings SculptSettings;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sculpting")
-	float SculptRadius = 500;
+	ESculptInput SculptInput;
+
+	// Switch between using camera aim, or mouse cursor as sculpt location
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sculpting")
+	bool bUseMouseMode = false;
+
+	// Distance you have to move away from previous sculpt location to send next sculpt request
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sculpting")
+	float SleepDistance = 300;
+
+	// Distance from camera that you can interact (not used in mouse mode)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sculpting")
+	float InteractionDistance = 100000;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sculpting")
-	float ToolStrength;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sculpting") // TODO add min max
-	float Falloff = 1;
+	TSubclassOf<AActor> DecalActorClass;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sculpting")
-	bool bUseQueueToUpdate = true;
+	FVector CurrentSculptLocation;
 
 
-public:
-	UFUNCTION(BlueprintCallable, Category = "Health")
-	void SculptStart(UCameraComponent* Camera);
+	AActor* DecalActorRef;
 
-	UFUNCTION(BlueprintCallable, Category = "Health")
-	void SculptStop();
 
-	FVector2D LastSculptLocation2D;
+	void Sculpt();
+
+	bool InSleepDistance(FVector CurrentLocation);
+
+	bool GetHitResult(FHitResult &Hit);
+
+	FVector LastLocation;
 	FTimerHandle SculptTimerHandle;
 	UCameraComponent* OwnerCamera;
 
+	FVector StartLocation;
 };

@@ -1,17 +1,20 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+// Copyright 2016 Andreas Schoch (aka Minaosis). All Rights Reserved.
 
 #pragma once
 
 #include "GameFramework/Actor.h"
+#include "TerrainEditorStuff.h"
+#include "ProceduralMeshComponent.h"
+#include "RuntimeMeshComponent.h"
 #include "TerrainGenerator.generated.h"
 
 
 class ATerrainSection;
-class URuntimeMeshComponent;
+//class URuntimeMeshComponent;
 
 
-UENUM(BlueprintType)
-enum class EVertPositionInsideSection : uint8
+/*UENUM(BlueprintType)
+enum class ESectionPosition : uint8
 {
 	SB_NotOnBorder		UMETA(DisplayName = "NotOnBorder"),
 	SB_BorderLeft 		UMETA(DisplayName = "BorderLeft"),
@@ -28,7 +31,8 @@ enum class EVertPositionInsideSection : uint8
 UENUM(BlueprintType)
 enum class ESculptMode : uint8
 {
-	ST_Sculpt		UMETA(DisplayName = "Sculpt"),
+	ST_Raise		UMETA(DisplayName = "Raise"),
+	ST_Lower		UMETA(DisplayName = "Lower"),
 	ST_Flatten		UMETA(DisplayName = "Flatten"),
 	ST_Smooth		UMETA(DisplayName = "Smooth"),
 };
@@ -36,20 +40,22 @@ enum class ESculptMode : uint8
 
 // Struct that constains global Vertex information
 USTRUCT(BlueprintType)
-struct FGlobalProperties
+struct FVertexData
 {
 	GENERATED_USTRUCT_BODY()
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
-	TArray<FVector> Vertices;
+	FVector Vertices;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
-	TArray<FVector2D> UV;
+	FVector2D UV;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
-	TArray<FVector> Normals;
+	FVector Normals;
 
-	FGlobalProperties()
+	// Vertex Color will be stored here aswell, currently used to visualize section borders
+
+	FVertexData()
 	{
 	}
 };
@@ -70,20 +76,20 @@ struct FSectionProperties
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
 	TArray<FVector> Normals;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct") // TODO remember to store vertexcolor in global vert data
 	TArray<FColor> VertexColors;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
 	TArray<int32> Triangles;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
-	TArray<EVertPositionInsideSection> PositionInsideSection;
+	TArray<ESectionPosition> SectionPosition;
 
 	FSectionProperties()
 	{
 	}
 };
-
+*/
 
 UCLASS()
 class RUNTIMEMESHTERRAIN_API ATerrainGenerator : public AActor
@@ -91,86 +97,106 @@ class RUNTIMEMESHTERRAIN_API ATerrainGenerator : public AActor
 	GENERATED_BODY()
 	
 public:
-	// Main function to generate Mesh
-	void GenerateMesh();
-	void GenerateMeshTimed();
-
-
+	void SectionRequestsUpdate(int32 SectionIndex, FSculptSettings SculptSettings, FVector HitLocation, ESculptInput SculptInput, FVector StartLocation);
 
 	// Getters 
-	UFUNCTION(BlueprintPure, Category = "ProceduralMeshGeneration")
 	int32 GetSectionXY() const { return SectionXY; }
-	UFUNCTION(BlueprintPure, Category = "ProceduralMeshGeneration")
 	float GetQuadSize() const { return QuadSize; }
-	UFUNCTION(BlueprintPure, Category = "ProceduralMeshGeneration")
 	int32 GetComponentXY() const { return ComponentXY; }
+	FSectionProperties* GetSectionProperties() { return &SectionProperties; }
+	auto* GetDummyTangents() { return &DummyTangents; }
+	auto* GetDummyTangentsRuntime() { return &DummyTangentsRuntime; }
 
-	// called from section actor on projectile hit
-	void SectionRequestsUpdate(int32 SectionIndex, FVector HitLocation, ESculptMode SculptMode, float ToolStrength, float ToolRadius, bool bUseUpdateQueue);
+
 	void SectionUpdateFinished();
 
 	//UPROPERTY(VisibleAnywhere, Category = "ProceduralMeshGeneration")
 	FSectionProperties SectionProperties;
 
+	// Number of Components/Sections on each side 
 	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
 	int32 ComponentXY = 1;
+
+	// Number of Vertices on each side of section
 	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
 	int32 SectionXY = 20;
+
+	// Distance from one Vertex to another in cm
 	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
 	float QuadSize = 100;
+
+	// How far from generator reaches down to copy height
 	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
 	float LineTraceLength = 10000;
+
+	// Z Offset from copied height 
 	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
 	float LineTraceHeightOffset = 100;
+
+	// visibility range from player pawn in cm
 	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
 	float SectionVisibilityRange = 80000;
-	//UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
-	//int32 HitRadius = 2;
-	//UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
-	//bool bUseUpdateQueue = true;
+
+	// using a timer prevents the gamethread from freezing at begin play 
 	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
 	bool bUseTimerforGeneration = true;
+
+	// Timer delay if using timed generation
 	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
 	float CreateSectionTimerDelay = 0.1;
 
+	// Timer delay if using timed generation
+	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
+	int32 MaxZValueOffsetPerUpdate = 300;
 
-	// class that acts as a mesh section
+	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
+	UCurveFloat* Curve = nullptr;
+
+
+	// Define Class that will be spawned as section. 
 	UPROPERTY(EditDefaultsOnly, Category = "ProceduralMeshGeneration")
 	TSubclassOf<ATerrainSection> ClassToSpawnAsSection;
 
 private:
 	ATerrainGenerator();
-	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
-
+	
+	void GenerateMesh();
 	void InitializeProperties();
 	void FillIndexBuffer();
 	void AddBorderVerticesToSectionProperties();
 	void FillGlobalProperties();
-	void FillGlobalPropertiesTimed();
-	inline void CopyLandscapeHeightBelow(FVector& Coordinates, FVector& Normal);
-
+	void CopyLandscapeHeightBelow(FVector& Coordinates, FVector& Normal);
 	void SpawnSectionActors();
 	void FillSectionVertStruct(int32 SectionIndex);
-	void MakeCrater(int32 SectionIndex, FVector HitLocation, ESculptMode SculptMode, float ToolStrength, float ToolRadius, bool bUseUpdateQueue);
+	void MakeCrater(int32 SectionIndex, FSculptSettings SculptSettings, FVector HitLocation, ESculptInput SculptInput, FVector StartLocation);
 
-	void FillIndexBufferTimed();
+	void AddAffectedSections(int32 SectionIndex, int32 VertexIndex, OUT TArray<int32> &AffectedSections);
 
 	UPROPERTY(VisibleAnywhere, Category = "Components")
 	URuntimeMeshComponent* RuntimeMeshComponent = nullptr;
 
-	FGlobalProperties GlobalProperties;
+	TArray<FVertexData> GlobalVertexData;
 	TArray<int32> IndexBuffer;
 
 	TArray<int32> SectionUpdateQueue; // TODO replace with TQueue
+	TQueue<int32> SectionUpdateQueue2;
+	TArray<int32> CreateTangentsForMeshQueue;
+	bool bAllowCreatingTangents = false;
 	bool bAllowedToUpdateSection = true;
-	TArray<int32> SectionCreateQueue;
 	TArray<ATerrainSection*> SectionActors;
 
-	
+	// needed when using "GenerateMeshTimed()" function
+	void GenerateMeshTimed();
+	void FillGlobalPropertiesTimed();
+	void FillIndexBufferTimed(); // TODO give better name
 	FTimerHandle SectionCreateTimerHandle;
 	int32 SectionIndexIter = 0;
 	int32 IndexBufferIter = 0;
 	int32 GlobalXIter = 0;
+
+	TArray<FProcMeshTangent> DummyTangents;
+	TArray<FRuntimeMeshTangent> DummyTangentsRuntime;
+
 };
