@@ -15,6 +15,12 @@ ATerrainGenerator::ATerrainGenerator()
 	PrimaryActorTick.bCanEverTick = true;
 	RuntimeMeshComponent = CreateDefaultSubobject<URuntimeMeshComponent>(TEXT("RuntimeMeshComponent"));
 	RootComponent = RuntimeMeshComponent;
+
+	LODProperties.Add(&SectionProperties);
+	LODProperties.Add(&SectionPropertiesLOD1);
+	LODProperties.Add(&SectionPropertiesLOD2);
+	LODProperties.Add(&SectionPropertiesLOD3);
+	LODProperties.Add(&SectionPropertiesLOD4);
 }
 
 
@@ -35,7 +41,6 @@ void ATerrainGenerator::Tick(float DeltaTime)
 	{
 		bAllowedToUpdateSection = false;
 		if (!SectionActors.IsValidIndex(SectionUpdateQueue[0])) { return; }
-		//FillSectionVertStruct(SectionUpdateQueue[0]);
 		SectionActors[SectionUpdateQueue[0]]->UpdateSection();
 	}
 }
@@ -83,23 +88,52 @@ void ATerrainGenerator::InitializeProperties()
 	AddBorderVerticesToSectionProperties();
 
 	// Init SectionPropertiesLOD1
-	int32 SectionXYLOD1 = (SectionXY+1) / 2;
+	int32 SectionXYLOD1 = ((SectionXY - 1) / FactorLOD1) + 1;
 	int32 LOD1NumVerts = SectionXYLOD1 * SectionXYLOD1;
-
+	
 	SectionPropertiesLOD1.Vertices.SetNum(LOD1NumVerts, true);
 	SectionPropertiesLOD1.UV.SetNum(LOD1NumVerts, true);
 	SectionPropertiesLOD1.Normals.SetNum(LOD1NumVerts, true);
 	URuntimeMeshLibrary::CreateGridMeshTriangles(SectionXYLOD1, SectionXYLOD1, false, OUT SectionPropertiesLOD1.Triangles);
 
-
+	
 	// Init SectionPropertiesLOD2
-	int32 LOD2NumVerts = SectionNumVerts / 4;
+	int32 SectionXYLOD2 = ((SectionXY - 1) / FactorLOD2) + 1;
+	int32 LOD2NumVerts = SectionXYLOD2 * SectionXYLOD2;
+
 	SectionPropertiesLOD2.Vertices.SetNum(LOD2NumVerts, true);
 	SectionPropertiesLOD2.UV.SetNum(LOD2NumVerts, true);
 	SectionPropertiesLOD2.Normals.SetNum(LOD2NumVerts, true);
-	URuntimeMeshLibrary::CreateGridMeshTriangles(SectionXY / 4, SectionXY / 4, false, OUT SectionPropertiesLOD2.Triangles);
-	//UE_LOG(LogTemp, Warning, TEXT("Triangles - Main: %i, LOD1: %i, LOD2: %i"), SectionProperties.Triangles.Num(), SectionPropertiesLOD1.Triangles.Num(), SectionPropertiesLOD2.Triangles.Num());
+	URuntimeMeshLibrary::CreateGridMeshTriangles(SectionXYLOD2, SectionXYLOD2, false, OUT SectionPropertiesLOD2.Triangles);
 
+	// Init SectionPropertiesLOD3
+	int32 SectionXYLOD3 = ((SectionXY - 1) / FactorLOD3) + 1;
+	int32 LOD3NumVerts = SectionXYLOD3 * SectionXYLOD3;
+
+	SectionPropertiesLOD3.Vertices.SetNum(LOD3NumVerts, true);
+	SectionPropertiesLOD3.UV.SetNum(LOD3NumVerts, true);
+	SectionPropertiesLOD3.Normals.SetNum(LOD3NumVerts, true);
+	URuntimeMeshLibrary::CreateGridMeshTriangles(SectionXYLOD3, SectionXYLOD3, false, OUT SectionPropertiesLOD3.Triangles);
+
+	// Init SectionPropertiesLOD4
+	int32 SectionXYLOD4 = ((SectionXY - 1) / FactorLOD4) + 1;
+	int32 LOD4NumVerts = SectionXYLOD4 * SectionXYLOD4;
+
+	SectionPropertiesLOD4.Vertices.SetNum(LOD4NumVerts, true);
+	SectionPropertiesLOD4.UV.SetNum(LOD4NumVerts, true);
+	SectionPropertiesLOD4.Normals.SetNum(LOD4NumVerts, true);
+	URuntimeMeshLibrary::CreateGridMeshTriangles(SectionXYLOD4, SectionXYLOD4, false, OUT SectionPropertiesLOD4.Triangles);
+
+
+	UE_LOG(LogTemp, Warning, TEXT("Triangles - LOD0: %i, LOD1: %i, LOD2: %i"), SectionProperties.Triangles.Num(), SectionPropertiesLOD1.Triangles.Num(), SectionPropertiesLOD2.Triangles.Num());
+	UE_LOG(LogTemp, Warning, TEXT("Vertices  - LOD0: %i, LOD1: %i, LOD2: %i"), SectionProperties.Vertices.Num(), SectionPropertiesLOD1.Vertices.Num(), SectionPropertiesLOD2.Vertices.Num());
+	UE_LOG(LogTemp, Warning, TEXT("%i  %i  %i  %i  %i  %i"),
+		SectionProperties.Triangles.Num(),
+		SectionProperties.Vertices.Num(),
+		SectionProperties.VertexColors.Num(),
+		SectionProperties.UV.Num(),
+		SectionProperties.Normals.Num(),
+		SectionProperties.SectionPosition.Num());
 }
 
 
@@ -194,7 +228,7 @@ void ATerrainGenerator::AddBorderVerticesToSectionProperties()
 			}
 
 			SectionProperties.SectionPosition[i] = VertPositionInsideSection;
-			//SectionProperties.VertexColors[i] = (VertPositionInsideSection == ESectionPosition::SB_NotOnBorder) ? (FColor(255, 255, 255, 0.0)) : (FColor(255, 0, 0, 1));
+			SectionProperties.VertexColors[i] = (VertPositionInsideSection == ESectionPosition::SB_NotOnBorder) ? (FColor(255, 255, 255, 0.0)) : (FColor(255, 0, 0, 1));
 		}
 	}
 }
@@ -300,7 +334,6 @@ void ATerrainGenerator::SpawnSectionActors()
 			SectionActors[SectionIndex]->InitializeOnSpawn(SectionIndex, FVector2D(X, Y), this);
 
 			// Fill SectionProperties and create section inside SectionActor
-			//FillSectionVertStruct(SectionIndex);
 			SectionActors[SectionIndex]->CreateSection();
 		}
 	}
@@ -333,6 +366,7 @@ void ATerrainGenerator::FillSectionVertStructLOD(int32 SectionIndex)
 	int32 L1 = 0;
 	int32 L2 = 0;
 	int32 L3 = 0;
+	int32 L4 = 0;
 
 
 	for (int i = 0; i + IndexStart < IndexEnd; i++)
@@ -345,30 +379,50 @@ void ATerrainGenerator::FillSectionVertStructLOD(int32 SectionIndex)
 		FVector Normal	= GlobalVertexData[Index].Normals;
 		FVector2D UV	= GlobalVertexData[Index].UV;
 
-		// Main
+		// LOD0
 		SectionProperties.Vertices[i]	= Vertex;
 		SectionProperties.Normals[i]	= Normal;
 		SectionProperties.UV[i]			= UV;
 
 		// LOD01
-		if (i % 2 == 0 && (i / SectionXY) % 2 == 0)
+		if (i % FactorLOD1 == 0 && (i / SectionXY) % FactorLOD1 == 0)
 		{
+			if (!SectionPropertiesLOD1.Vertices.IsValidIndex(L1)) { continue; }
 			SectionPropertiesLOD1.Vertices[L1]	= Vertex;
 			SectionPropertiesLOD1.Normals[L1]	= Normal;
 			SectionPropertiesLOD1.UV[L1]		= UV;
-			//UE_LOG(LogTemp, Error, TEXT("L1: %i  i: %i UVLOD1: %s"), L1, i, *UV.ToString());
 			L1++;
-
 		}
-		/*
+		
 		// LOD02
-		if (i % 4)
+		if (i % FactorLOD2 == 0 && (i / SectionXY) % FactorLOD2 == 0)
 		{
+			if (!SectionPropertiesLOD2.Vertices.IsValidIndex(L2)) { continue; }
 			SectionPropertiesLOD2.Vertices[L2]	= Vertex;
 			SectionPropertiesLOD2.Normals[L2]	= Normal;
 			SectionPropertiesLOD2.UV[L2]		= UV;
 			L2++;
-		}*/
+		}
+
+		// LOD03
+		if (i % FactorLOD3 == 0 && (i / SectionXY) % FactorLOD3 == 0)
+		{
+			if (!SectionPropertiesLOD3.Vertices.IsValidIndex(L3)) { continue; }
+			SectionPropertiesLOD3.Vertices[L3] = Vertex;
+			SectionPropertiesLOD3.Normals[L3] = Normal;
+			SectionPropertiesLOD3.UV[L3] = UV;
+			L3++;
+		}
+
+		// LOD03
+		if (i % FactorLOD4 == 0 && (i / SectionXY) % FactorLOD4 == 0)
+		{
+			if (!SectionPropertiesLOD4.Vertices.IsValidIndex(L4)) { continue; }
+			SectionPropertiesLOD4.Vertices[L4] = Vertex;
+			SectionPropertiesLOD4.Normals[L4] = Normal;
+			SectionPropertiesLOD4.UV[L4] = UV;
+			L4++;
+		}
 	}
 }
 

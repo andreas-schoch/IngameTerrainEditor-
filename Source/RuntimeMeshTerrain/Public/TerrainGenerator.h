@@ -10,86 +10,7 @@
 
 
 class ATerrainSection;
-//class URuntimeMeshComponent;
 
-
-/*UENUM(BlueprintType)
-enum class ESectionPosition : uint8
-{
-	SB_NotOnBorder		UMETA(DisplayName = "NotOnBorder"),
-	SB_BorderLeft 		UMETA(DisplayName = "BorderLeft"),
-	SB_BorderRight		UMETA(DisplayName = "BorderRight"),
-	SB_BorderTop 		UMETA(DisplayName = "BorderTop"),
-	SB_BorderBottom 	UMETA(DisplayName = "BorderBottom"),
-	SB_EdgeTopLeft 		UMETA(DisplayName = "EdgeTopLeft"),
-	SB_EdgeTopRight 	UMETA(DisplayName = "EdgeTopRight"),
-	SB_EdgeBottomLeft 	UMETA(DisplayName = "EdgeBottomLeft"),
-	SB_EdgeBottomRight 	UMETA(DisplayName = "EdgeBottomRight")
-};
-
-
-UENUM(BlueprintType)
-enum class ESculptMode : uint8
-{
-	ST_Raise		UMETA(DisplayName = "Raise"),
-	ST_Lower		UMETA(DisplayName = "Lower"),
-	ST_Flatten		UMETA(DisplayName = "Flatten"),
-	ST_Smooth		UMETA(DisplayName = "Smooth"),
-};
-
-
-// Struct that constains global Vertex information
-USTRUCT(BlueprintType)
-struct FVertexData
-{
-	GENERATED_USTRUCT_BODY()
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
-	FVector Vertices;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
-	FVector2D UV;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
-	FVector Normals;
-
-	// Vertex Color will be stored here aswell, currently used to visualize section borders
-
-	FVertexData()
-	{
-	}
-};
-
-
-// Struct that constains necessary Vertex information of a single section
-USTRUCT(BlueprintType)
-struct FSectionProperties
-{
-	GENERATED_USTRUCT_BODY()
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
-	TArray<FVector> Vertices;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
-	TArray<FVector2D> UV;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
-	TArray<FVector> Normals;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct") // TODO remember to store vertexcolor in global vert data
-	TArray<FColor> VertexColors;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
-	TArray<int32> Triangles;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
-	TArray<ESectionPosition> SectionPosition;
-
-	FSectionProperties()
-	{
-	}
-};
-*/
 
 UCLASS()
 class RUNTIMEMESHTERRAIN_API ATerrainGenerator : public AActor
@@ -115,7 +36,10 @@ public:
 	FSectionProperties SectionProperties;
 	FSectionProperties SectionPropertiesLOD1;
 	FSectionProperties SectionPropertiesLOD2;
+	FSectionProperties SectionPropertiesLOD3;
+	FSectionProperties SectionPropertiesLOD4;
 
+	TArray<FSectionProperties*> LODProperties;
 
 
 	// Number of Components/Sections on each side 
@@ -138,9 +62,20 @@ public:
 	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
 	float LineTraceHeightOffset = 100;
 
-	// visibility range from player pawn in cm
 	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
-	float SectionVisibilityRange = 80000;
+	float VisibilityLOD0 = 20000;
+
+	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
+	float VisibilityLOD1 = 60000;
+
+	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
+	float VisibilityLOD2 = 100000;
+
+	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
+	float VisibilityLOD3 = 150000;
+
+	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
+	float VisibilityLOD4 = 200000;
 
 	// using a timer prevents the gamethread from freezing at begin play 
 	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
@@ -161,6 +96,17 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "ProceduralMeshGeneration")
 	TSubclassOf<ATerrainSection> ClassToSpawnAsSection;
 
+	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration LOD")
+	int32 FactorLOD1 = 2;
+
+	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration LOD")
+	int32 FactorLOD2 = 4;
+
+	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration LOD")
+	int32 FactorLOD3 = 8;
+
+	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration LOD")
+	int32 FactorLOD4 = 16;
 
 	UPROPERTY(EditAnywhere, Category = "Noise")
 		float NoiseMultiplier = 1000;
@@ -193,7 +139,9 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = "Components")
 	URuntimeMeshComponent* RuntimeMeshComponent = nullptr;
 
+	UPROPERTY()
 	TArray<FVertexData> GlobalVertexData;
+
 	TArray<int32> IndexBuffer;
 
 	TArray<int32> SectionUpdateQueue; // TODO replace with TQueue
