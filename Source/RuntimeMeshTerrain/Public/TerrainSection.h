@@ -20,6 +20,10 @@ public:
 	void InitializeOnSpawn(int32 SectionIndex, FVector2D ComponentCoordinates, ATerrainGenerator* Terrain);
 	void CreateSection();
 	void UpdateSection();
+	void CreateLOD1();
+	void UpdateLOD1();
+
+
 	FVector2D SectionCoordinates;
 	FVector2D SectionCenterWorldLocation2D;
 
@@ -38,6 +42,11 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category = "Components")
 	UProceduralMeshComponent* ProceduralMeshComponent = nullptr;
+
+	URuntimeMeshComponent* RuntimeMeshComponentLOD1 = nullptr;
+	UProceduralMeshComponent* ProceduralMeshComponentLOD1 = nullptr;
+
+
 
 	ATerrainGenerator* OwningTerrain = nullptr;
 

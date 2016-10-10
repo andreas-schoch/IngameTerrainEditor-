@@ -15,6 +15,12 @@ ATerrainSection::ATerrainSection()
 	RootComponent = RuntimeMeshComponent;
 	ProceduralMeshComponent = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("ProceduralMeshComponent"));
 	ProceduralMeshComponent->SetupAttachment(RootComponent);
+
+	// LODs
+	RuntimeMeshComponentLOD1 = CreateDefaultSubobject<URuntimeMeshComponent>(TEXT("RuntimeMeshComponentLOD1"));
+	RuntimeMeshComponentLOD1->SetupAttachment(RootComponent);
+	ProceduralMeshComponentLOD1 = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("ProceduralMeshComponentLOD1"));
+	ProceduralMeshComponentLOD1->SetupAttachment(RootComponent);
 }
 
 
@@ -42,6 +48,7 @@ void ATerrainSection::CreateSection()
 {
 	// Called from Terrain Generator on spawn
 	FSectionProperties* SectionPropertiesPtr = &OwningTerrain->SectionProperties;
+	OwningTerrain->FillSectionVertStructLOD(SectionIndexLocal);
 
 	if (bUseRuntimeMeshComponent)
 	{
@@ -68,21 +75,24 @@ void ATerrainSection::CreateSection()
 			*OwningTerrain->GetDummyTangents(),
 			true);
 	}
+
+	CreateLOD1();
 }
 
 
 void ATerrainSection::UpdateSection()
 {
-	//FSectionProperties* SectionPropertiesPtr = &OwningTerrain->SectionProperties;
-	
+	FSectionProperties* SectionPropertiesPtr = &OwningTerrain->SectionProperties;
+	OwningTerrain->FillSectionVertStructLOD(SectionIndexLocal);
+
 	if (bUseRuntimeMeshComponent)
 	{
 		RuntimeMeshComponent->UpdateMeshSection(
 			0,
-			OwningTerrain->GetSectionProperties()->Vertices,
-			OwningTerrain->GetSectionProperties()->Normals,
-			OwningTerrain->GetSectionProperties()->UV,
-			OwningTerrain->GetSectionProperties()->VertexColors,
+			SectionPropertiesPtr->Vertices,
+			SectionPropertiesPtr->Normals,
+			SectionPropertiesPtr->UV,
+			SectionPropertiesPtr->VertexColors,
 			*OwningTerrain->GetDummyTangentsRuntime());
 		OwningTerrain->SectionUpdateFinished();
 	}
@@ -90,19 +100,20 @@ void ATerrainSection::UpdateSection()
 	{
 		ProceduralMeshComponent->UpdateMeshSection(
 			0,
-			OwningTerrain->GetSectionProperties()->Vertices,
-			OwningTerrain->GetSectionProperties()->Normals,
-			OwningTerrain->GetSectionProperties()->UV,
-			OwningTerrain->GetSectionProperties()->VertexColors,
+			SectionPropertiesPtr->Vertices,
+			SectionPropertiesPtr->Normals,
+			SectionPropertiesPtr->UV,
+			SectionPropertiesPtr->VertexColors,
 			*OwningTerrain->GetDummyTangents());
 	}
+	UpdateLOD1();
 }
 
 
 void ATerrainSection::SetVisibility()
 {
 	if (!ensure(PlayerControllerReference)) { return; }
-	auto PlayerPawnWorldLocation = PlayerControllerReference->GetPawn()->GetActorLocation();
+	FVector PlayerPawnWorldLocation = PlayerControllerReference->GetPawn()->GetActorLocation();
 	FVector2D PlayerPawnWorldLocation2D = FVector2D(PlayerPawnWorldLocation.X, PlayerPawnWorldLocation.Y);
 	float DistanceToPawn = FVector2D::Distance(PlayerPawnWorldLocation2D, SectionCenterWorldLocation2D);
 
@@ -111,11 +122,12 @@ void ATerrainSection::SetVisibility()
 		if (bUseRuntimeMeshComponent)
 		{
 			RuntimeMeshComponent->SetVisibility(false);
-			//RuntimeMeshComponent->SetMeshSectionCollisionEnabled(0, false); // needs queue
+			RuntimeMeshComponentLOD1->SetVisibility(true);
 		}
 		else
 		{
 			ProceduralMeshComponent->SetVisibility(false);
+			ProceduralMeshComponentLOD1->SetVisibility(true);
 		}
 	}
 	else if (DistanceToPawn < OwningTerrain->SectionVisibilityRange && !(bUseRuntimeMeshComponent ? RuntimeMeshComponent->IsVisible() : ProceduralMeshComponent->IsVisible()))
@@ -123,12 +135,13 @@ void ATerrainSection::SetVisibility()
 		if (bUseRuntimeMeshComponent)
 		{
 			RuntimeMeshComponent->SetVisibility(true);
-			//RuntimeMeshComponent->SetMeshSectionCollisionEnabled(0, true);
+			RuntimeMeshComponentLOD1->SetVisibility(false);
 		}
 		else
 		{
 			ProceduralMeshComponent->SetVisibility(true);
-		}		
+			ProceduralMeshComponentLOD1->SetVisibility(false);
+		}
 	}
 }
 
@@ -136,4 +149,63 @@ void ATerrainSection::SetVisibility()
 void ATerrainSection::RequestSculpting(FSculptSettings SculptSettings, FVector HitLocation, ESculptInput SculptInput, FVector StartLocation)
 {
 	OwningTerrain->SectionRequestsUpdate(SectionIndexLocal, SculptSettings, HitLocation, SculptInput, StartLocation);
+}
+
+
+void ATerrainSection::CreateLOD1()
+{
+	FSectionProperties* SectionPropertiesLOD1Ptr = &OwningTerrain->SectionPropertiesLOD1;
+
+	if (bUseRuntimeMeshComponent)
+	{
+		RuntimeMeshComponentLOD1->CreateMeshSection(
+			0,
+			SectionPropertiesLOD1Ptr->Vertices,
+			SectionPropertiesLOD1Ptr->Triangles,
+			SectionPropertiesLOD1Ptr->Normals,
+			SectionPropertiesLOD1Ptr->UV,
+			SectionPropertiesLOD1Ptr->VertexColors,
+			*OwningTerrain->GetDummyTangentsRuntime(),
+			false,
+			EUpdateFrequency::Frequent);
+	}
+	else
+	{
+		ProceduralMeshComponentLOD1->CreateMeshSection(
+			0,
+			SectionPropertiesLOD1Ptr->Vertices,
+			SectionPropertiesLOD1Ptr->Triangles,
+			SectionPropertiesLOD1Ptr->Normals,
+			SectionPropertiesLOD1Ptr->UV,
+			SectionPropertiesLOD1Ptr->VertexColors,
+			*OwningTerrain->GetDummyTangents(),
+			false);
+	}
+}
+
+void ATerrainSection::UpdateLOD1()
+{
+	FSectionProperties* SectionPropertiesLOD1Ptr = &OwningTerrain->SectionPropertiesLOD1;
+
+	if (bUseRuntimeMeshComponent)
+	{
+		RuntimeMeshComponentLOD1->UpdateMeshSection(
+			0,
+			SectionPropertiesLOD1Ptr->Vertices,
+			SectionPropertiesLOD1Ptr->Normals,
+			SectionPropertiesLOD1Ptr->UV,
+			SectionPropertiesLOD1Ptr->VertexColors,
+			*OwningTerrain->GetDummyTangentsRuntime());
+		OwningTerrain->SectionUpdateFinished();
+	}
+	else
+	{
+		ProceduralMeshComponentLOD1->UpdateMeshSection(
+			0,
+			SectionPropertiesLOD1Ptr->Vertices,
+			SectionPropertiesLOD1Ptr->Normals,
+			SectionPropertiesLOD1Ptr->UV,
+			SectionPropertiesLOD1Ptr->VertexColors,
+			*OwningTerrain->GetDummyTangents());
+	}
 }

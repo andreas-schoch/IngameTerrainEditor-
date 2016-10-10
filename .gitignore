@@ -1,7 +1,8 @@
 #Added self
 *.VC.db
 Content/StarterContent/*
-
+*Plugins/SimplexNoise/SimplexNoise/Binaries
+*Plugins/SimplexNoise/SimplexNoise/Intermediate
 
 
 # Visual Studio 2015 user specific files

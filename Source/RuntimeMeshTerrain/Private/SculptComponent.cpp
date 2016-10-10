@@ -17,6 +17,7 @@ void USculptComponent::BeginPlay()
 	Super::BeginPlay();
 }
 
+
 void USculptComponent::TickComponent( float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction )
 {
 	Super::TickComponent( DeltaTime, TickType, ThisTickFunction );

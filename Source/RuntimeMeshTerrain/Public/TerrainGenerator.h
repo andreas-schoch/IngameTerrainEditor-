@@ -104,14 +104,19 @@ public:
 	float GetQuadSize() const { return QuadSize; }
 	int32 GetComponentXY() const { return ComponentXY; }
 	FSectionProperties* GetSectionProperties() { return &SectionProperties; }
+
 	auto* GetDummyTangents() { return &DummyTangents; }
 	auto* GetDummyTangentsRuntime() { return &DummyTangentsRuntime; }
 
-
+	void FillSectionVertStruct(int32 SectionIndex);
+	void FillSectionVertStructLOD(int32 SectionIndex);
 	void SectionUpdateFinished();
 
-	//UPROPERTY(VisibleAnywhere, Category = "ProceduralMeshGeneration")
 	FSectionProperties SectionProperties;
+	FSectionProperties SectionPropertiesLOD1;
+	FSectionProperties SectionPropertiesLOD2;
+
+
 
 	// Number of Components/Sections on each side 
 	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
@@ -152,10 +157,16 @@ public:
 	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
 	UCurveFloat* Curve = nullptr;
 
-
 	// Define Class that will be spawned as section. 
 	UPROPERTY(EditDefaultsOnly, Category = "ProceduralMeshGeneration")
 	TSubclassOf<ATerrainSection> ClassToSpawnAsSection;
+
+
+	UPROPERTY(EditAnywhere, Category = "Noise")
+		float NoiseMultiplier = 1000;
+
+	UPROPERTY(EditAnywhere, Category = "Noise")
+		float NoiseDensity = 100;
 
 private:
 	ATerrainGenerator();
@@ -169,8 +180,13 @@ private:
 	void FillGlobalProperties();
 	void CopyLandscapeHeightBelow(FVector& Coordinates, FVector& Normal);
 	void SpawnSectionActors();
-	void FillSectionVertStruct(int32 SectionIndex);
 	void MakeCrater(int32 SectionIndex, FSculptSettings SculptSettings, FVector HitLocation, ESculptInput SculptInput, FVector StartLocation);
+
+	FVector CalculateVertexNormal(int32 VertexIndex);
+
+
+	void FillGlobalNormals();
+
 
 	void AddAffectedSections(int32 SectionIndex, int32 VertexIndex, OUT TArray<int32> &AffectedSections);
 
