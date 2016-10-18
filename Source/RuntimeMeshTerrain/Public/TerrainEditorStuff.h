@@ -31,10 +31,14 @@ enum class ESectionPosition : uint8
 UENUM(BlueprintType)
 enum class ESculptMode : uint8
 {
-	ST_Raise		UMETA(DisplayName = "Raise"),
-	ST_Lower		UMETA(DisplayName = "Lower"),
-	ST_Flatten		UMETA(DisplayName = "Flatten"),
-	ST_Smooth		UMETA(DisplayName = "Smooth"),
+	ST_Raise				UMETA(DisplayName = "Raise"),
+	ST_Lower				UMETA(DisplayName = "Lower"),
+	ST_Flatten				UMETA(DisplayName = "Flatten"),
+	ST_Smooth				UMETA(DisplayName = "Smooth"),
+	ST_NoiseAdditive		UMETA(DisplayName = "NoiseAdditive"),
+	ST_NoiseSubtractive		UMETA(DisplayName = "NoiseSubtractive"),
+	ST_PaintAdditive		UMETA(DisplayName = "PaintAdditive"),
+	ST_PaintSubtractive		UMETA(DisplayName = "PaintSubtractive"),
 };
 
 
@@ -44,6 +48,15 @@ enum class ESculptInput : uint8
 	ST_Started		UMETA(DisplayName = "Started"),
 	ST_Ongoing		UMETA(DisplayName = "Ongoing"),
 	ST_Stopped		UMETA(DisplayName = "Stopped"),
+};
+
+
+UENUM(BlueprintType)
+enum class ETerrainGeneration : uint8
+{
+	TG_LineTrace	UMETA(DisplayName = "LineTrace"),
+	TG_Flat			UMETA(DisplayName = "Flat"),
+	TG_Noise		UMETA(DisplayName = "Noise"),
 };
 
 
@@ -62,10 +75,12 @@ struct FVertexData
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
 	FVector Normals;
 
-	// Vertex Color will be stored here aswell, currently used to visualize section borders
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Struct")
+	FColor VertexColor;
 
 	FVertexData()
 	{
+		VertexColor = FColor(0, 0, 0, 0);
 	}
 };
 
@@ -130,6 +145,9 @@ struct FSculptSettings
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sculpting")
 	ESculptInput SculptInput;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sculpting")
+	FColor Color = FColor(255, 0, 0, 1);
+
 	FSculptSettings()
 	{
 	}
@@ -151,6 +169,4 @@ public:
 	// Called every frame
 	virtual void Tick( float DeltaSeconds ) override;
 
-	
-	
 };

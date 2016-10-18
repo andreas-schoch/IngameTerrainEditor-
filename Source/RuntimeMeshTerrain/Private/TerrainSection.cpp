@@ -11,9 +11,13 @@
 ATerrainSection::ATerrainSection()
 {
 	PrimaryActorTick.bCanEverTick = false;
+	//Root
+	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
+	RootComponent = SceneRoot;
+
 	// LOD0 
 	RuntimeMeshComponent = CreateDefaultSubobject<URuntimeMeshComponent>(TEXT("RuntimeMeshComponent"));
-	RootComponent = RuntimeMeshComponent;
+	RuntimeMeshComponent->SetupAttachment(RootComponent);
 	RuntimeMeshLODs.Add(RuntimeMeshComponent);
 	ProceduralMeshComponent = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("ProceduralMeshComponent"));
 	ProceduralMeshComponent->SetupAttachment(RootComponent);
@@ -64,11 +68,11 @@ void ATerrainSection::InitializeOnSpawn(int32 SectionIndex, FVector2D ComponentC
 {
 	OwningTerrain = Terrain;
 	SectionIndexLocal = SectionIndex;
-	SectionCoordinates = FVector2D(SectionIndex / OwningTerrain->GetSectionXY(), SectionIndex % OwningTerrain->GetSectionXY());
-	auto SectionSideInCM = (OwningTerrain->GetSectionXY()-1) * OwningTerrain->GetQuadSize();
-	auto Half = SectionSideInCM / 2;
-	SectionCenterWorldLocation2D = FVector2D(GetActorLocation().X + ComponentCoordinates.X * SectionSideInCM + Half, GetActorLocation().Y + ComponentCoordinates.Y * SectionSideInCM + Half);
+	SectionCoordinates = FVector(SectionIndex / OwningTerrain->GetSectionXY(), SectionIndex % OwningTerrain->GetSectionXY(), 0);
 
+	float SectionLength = (OwningTerrain->GetSectionXY() - 1) * OwningTerrain->GetQuadSize();
+	FVector Coords = FVector(ComponentCoordinates.X, ComponentCoordinates.Y, 0);
+	CenterLocation = (GetActorLocation() + (Coords * SectionLength) + (SectionLength / 2)) * FVector(1, 1, 0);
 	PlayerControllerReference = GetWorld()->GetFirstPlayerController();
 }
 
@@ -76,7 +80,6 @@ void ATerrainSection::InitializeOnSpawn(int32 SectionIndex, FVector2D ComponentC
 void ATerrainSection::CreateSection()
 {
 	// Called from Terrain Generator on spawn
-	//FSectionProperties* SectionPropertiesPtr = &OwningTerrain->SectionProperties;
 	OwningTerrain->FillSectionVertStructLOD(SectionIndexLocal);
 
 	if (bUseRuntimeMeshComponent)
@@ -93,6 +96,11 @@ void ATerrainSection::CreateSection()
 				*OwningTerrain->GetDummyTangentsRuntime(),
 				(i == 0) ? true : false,
 				EUpdateFrequency::Frequent);
+
+			if (i > 3)
+			{
+				RuntimeMeshLODs[i]->SetCastShadow(false);
+			}
 		}
 	}
 	else
@@ -108,6 +116,11 @@ void ATerrainSection::CreateSection()
 				OwningTerrain->LODProperties[i]->VertexColors,
 				*OwningTerrain->GetDummyTangents(),
 				(i == 0) ? true : false);
+
+			if (i > 3)
+			{
+				ProceduralMeshLODs[i]->SetCastShadow(false);
+			}
 		}
 	}
 }
@@ -115,7 +128,6 @@ void ATerrainSection::CreateSection()
 
 void ATerrainSection::UpdateSection()
 {
-	FSectionProperties* SectionPropertiesPtr = &OwningTerrain->SectionProperties;
 	OwningTerrain->FillSectionVertStructLOD(SectionIndexLocal);
 
 	if (bUseRuntimeMeshComponent)
@@ -151,9 +163,10 @@ void ATerrainSection::UpdateSection()
 void ATerrainSection::SetVisibility()
 {
 	if (!ensure(PlayerControllerReference)) { return; }
-	FVector PlayerPawnWorldLocation = PlayerControllerReference->GetPawn()->GetActorLocation();
-	FVector2D PlayerPawnWorldLocation2D = FVector2D(PlayerPawnWorldLocation.X, PlayerPawnWorldLocation.Y);
-	float DistanceToPawn = FVector2D::Distance(PlayerPawnWorldLocation2D, SectionCenterWorldLocation2D);
+	FVector PlayerLocation = PlayerControllerReference->GetPawn()->GetActorLocation() * FVector(1, 1, 0);
+	float DistanceX = FVector::Dist(PlayerLocation, FVector(CenterLocation.X, PlayerLocation.Y, 0));
+	float DistanceY = FVector::Dist(PlayerLocation, FVector(PlayerLocation.X, CenterLocation.Y, 0));
+	float DistanceToPawn = (DistanceX > DistanceY) ? DistanceX : DistanceY;
 
 	//check if it should be visible
 	bool bIsVisibleLOD0 = (DistanceToPawn < OwningTerrain->VisibilityLOD0) ? true : false;
@@ -179,15 +192,6 @@ void ATerrainSection::SetVisibility()
 		ProceduralMeshComponentLOD3->SetVisibility(bIsVisibleLOD3);
 		ProceduralMeshComponentLOD4->SetVisibility(bIsVisibleLOD4);
 	}
-}
-
-
-void ATerrainSection::SetVisibilityTest()
-{
-	if (!ensure(PlayerControllerReference)) { return; }
-	FVector PlayerPawnWorldLocation = PlayerControllerReference->GetPawn()->GetActorLocation();
-	FVector2D PlayerPawnWorldLocation2D = FVector2D(PlayerPawnWorldLocation.X, PlayerPawnWorldLocation.Y);
-	float DistanceToPawn = FVector2D::Distance(PlayerPawnWorldLocation2D, SectionCenterWorldLocation2D);
 }
 
 

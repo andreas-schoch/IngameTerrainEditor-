@@ -12,6 +12,7 @@ USculptComponent::USculptComponent()
 }
 
 
+
 void USculptComponent::BeginPlay()
 {
 	Super::BeginPlay();

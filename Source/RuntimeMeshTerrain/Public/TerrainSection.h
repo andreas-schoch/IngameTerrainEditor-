@@ -21,8 +21,8 @@ public:
 	void CreateSection();
 	void UpdateSection();
 
-	FVector2D SectionCoordinates;
-	FVector2D SectionCenterWorldLocation2D;
+	FVector SectionCoordinates;
+	FVector CenterLocation;
 
 	UPROPERTY(EditAnywhere, Category = "ProceduralMeshGeneration")
 	bool bUseRuntimeMeshComponent = true;
@@ -33,8 +33,9 @@ public:
 private:
 	virtual void BeginPlay() override;
 	void SetVisibility();
-	void SetVisibilityTest();
 
+	UPROPERTY(VisibleAnywhere, Category = "Components")
+	USceneComponent* SceneRoot = nullptr;
 
 	UPROPERTY(VisibleAnywhere, Category = "Components")
 	URuntimeMeshComponent* RuntimeMeshComponent = nullptr;
@@ -83,3 +84,4 @@ private:
 
 	FTimerHandle VisibilityTimerHandle;
 };
+
