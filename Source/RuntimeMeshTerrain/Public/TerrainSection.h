@@ -17,7 +17,7 @@ class RUNTIMEMESHTERRAIN_API ATerrainSection : public AActor
 	
 public:	
 	ATerrainSection();
-	void InitializeOnSpawn(int32 SectionIndex, FVector2D ComponentCoordinates, ATerrainGenerator* Terrain);
+	void InitializeOnSpawn(int32 SectionIndex, ATerrainGenerator* Terrain);
 	void CreateSection();
 	void UpdateSection();
 
@@ -28,7 +28,7 @@ public:
 	bool bUseRuntimeMeshComponent = true;
 
 	UFUNCTION(BlueprintCallable, Category = "ProceduralMeshGeneration")
-	void RequestSculpting(FSculptSettings SculptSettings, FVector HitLocation, ESculptInput SculptInput, FVector StartLocation);
+	void RequestSculpting(const FSculptSettings& Settings, const FSculptInputInfo& InputInfo);
 
 private:
 	virtual void BeginPlay() override;

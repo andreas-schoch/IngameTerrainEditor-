@@ -64,15 +64,14 @@ void ATerrainSection::BeginPlay()
 }
 
 
-void ATerrainSection::InitializeOnSpawn(int32 SectionIndex, FVector2D ComponentCoordinates, ATerrainGenerator* Terrain)
+void ATerrainSection::InitializeOnSpawn(int32 SectionIndex, ATerrainGenerator* Terrain)
 {
 	OwningTerrain = Terrain;
 	SectionIndexLocal = SectionIndex;
-	SectionCoordinates = FVector(SectionIndex / OwningTerrain->GetSectionXY(), SectionIndex % OwningTerrain->GetSectionXY(), 0);
+	SectionCoordinates = FVector(SectionIndex / OwningTerrain->GetComponentXY(), SectionIndex % OwningTerrain->GetComponentXY(), 0);
 
-	float SectionLength = (OwningTerrain->GetSectionXY() - 1) * OwningTerrain->GetQuadSize();
-	FVector Coords = FVector(ComponentCoordinates.X, ComponentCoordinates.Y, 0);
-	CenterLocation = (GetActorLocation() + (Coords * SectionLength) + (SectionLength / 2)) * FVector(1, 1, 0);
+	float SideLength = (OwningTerrain->GetSectionXY() - 1) * OwningTerrain->GetQuadSize();
+	CenterLocation = (GetActorLocation() + (SectionCoordinates * SideLength) + (SideLength / 2)) * FVector(1, 1, 0);
 	PlayerControllerReference = GetWorld()->GetFirstPlayerController();
 }
 
@@ -84,6 +83,7 @@ void ATerrainSection::CreateSection()
 
 	if (bUseRuntimeMeshComponent)
 	{
+		TArray<FRuntimeMeshTangent> DummyTangentsRuntime;
 		for (int32 i = 0; i < RuntimeMeshLODs.Num(); i++)
 		{
 			RuntimeMeshLODs[i]->CreateMeshSection(
@@ -93,7 +93,7 @@ void ATerrainSection::CreateSection()
 				OwningTerrain->LODProperties[i]->Normals,
 				OwningTerrain->LODProperties[i]->UV,
 				OwningTerrain->LODProperties[i]->VertexColors,
-				*OwningTerrain->GetDummyTangentsRuntime(),
+				DummyTangentsRuntime,
 				(i == 0) ? true : false,
 				EUpdateFrequency::Frequent);
 
@@ -105,6 +105,7 @@ void ATerrainSection::CreateSection()
 	}
 	else
 	{
+		TArray<FProcMeshTangent> DummyTangents;
 		for (int32 i = 0; i < ProceduralMeshLODs.Num(); i++)
 		{
 			ProceduralMeshLODs[i]->CreateMeshSection(
@@ -114,10 +115,10 @@ void ATerrainSection::CreateSection()
 				OwningTerrain->LODProperties[i]->Normals,
 				OwningTerrain->LODProperties[i]->UV,
 				OwningTerrain->LODProperties[i]->VertexColors,
-				*OwningTerrain->GetDummyTangents(),
+				DummyTangents,
 				(i == 0) ? true : false);
 
-			if (i > 3)
+			if (i > 2)
 			{
 				ProceduralMeshLODs[i]->SetCastShadow(false);
 			}
@@ -132,6 +133,7 @@ void ATerrainSection::UpdateSection()
 
 	if (bUseRuntimeMeshComponent)
 	{
+		TArray<FRuntimeMeshTangent> DummyTangentsRuntime;
 		for (int32 i = 0; i < RuntimeMeshLODs.Num(); i++)
 		{
 			RuntimeMeshLODs[i]->UpdateMeshSection(
@@ -140,12 +142,12 @@ void ATerrainSection::UpdateSection()
 				OwningTerrain->LODProperties[i]->Normals,
 				OwningTerrain->LODProperties[i]->UV,
 				OwningTerrain->LODProperties[i]->VertexColors,
-				*OwningTerrain->GetDummyTangentsRuntime());
-			OwningTerrain->SectionUpdateFinished();
+				DummyTangentsRuntime);
 		}
 	}
 	else
 	{
+		TArray<FProcMeshTangent> DummyTangents;
 		for (int32 i = 0; i < ProceduralMeshLODs.Num(); i++)
 		{
 			ProceduralMeshLODs[i]->UpdateMeshSection(
@@ -154,9 +156,10 @@ void ATerrainSection::UpdateSection()
 				OwningTerrain->LODProperties[i]->Normals,
 				OwningTerrain->LODProperties[i]->UV,
 				OwningTerrain->LODProperties[i]->VertexColors,
-				*OwningTerrain->GetDummyTangents());
+				DummyTangents);
 		}
 	}
+	OwningTerrain->SectionUpdateFinished();
 }
 
 
@@ -195,7 +198,7 @@ void ATerrainSection::SetVisibility()
 }
 
 
-void ATerrainSection::RequestSculpting(FSculptSettings SculptSettings, FVector HitLocation, ESculptInput SculptInput, FVector StartLocation)
+void ATerrainSection::RequestSculpting(const FSculptSettings& Settings, const FSculptInputInfo& InputInfo)
 {
-	OwningTerrain->SectionRequestsUpdate(SectionIndexLocal, SculptSettings, HitLocation, SculptInput, StartLocation);
+	OwningTerrain->SectionRequestsUpdate(SectionIndexLocal, Settings, InputInfo);
 }

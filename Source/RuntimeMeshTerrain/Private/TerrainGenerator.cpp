@@ -13,8 +13,9 @@
 ATerrainGenerator::ATerrainGenerator()
 {
 	PrimaryActorTick.bCanEverTick = true;
-	RuntimeMeshComponent = CreateDefaultSubobject<URuntimeMeshComponent>(TEXT("RuntimeMeshComponent"));
-	RootComponent = RuntimeMeshComponent;
+
+	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
+	RootComponent = SceneRoot;
 
 	LODProperties.Add(&SectionProperties);
 	LODProperties.Add(&SectionPropertiesLOD1);
@@ -28,15 +29,18 @@ void ATerrainGenerator::BeginPlay()
 {
 	Super::BeginPlay();
 	USimplexNoiseBPLibrary::setNoiseSeed(Seed);
-	
+	SetLODVisibility();
+	bUseTimerforGeneration ? GenerateMeshTimed() : GenerateMesh();
+}
+
+void ATerrainGenerator::SetLODVisibility()
+{
 	float SectionLength = (SectionXY - 1) * QuadSize;
 	VisibilityLOD0 = SectionLength * 1.5;
 	VisibilityLOD1 = SectionLength * 2.5;
 	VisibilityLOD2 = SectionLength * 3.5;
 	VisibilityLOD3 = SectionLength * 4.5;
-	VisibilityLOD4 = SectionLength * 9.5;
-
-	bUseTimerforGeneration ? GenerateMeshTimed() : GenerateMesh();
+	VisibilityLOD4 = SectionLength * 10.5;
 }
 
 
@@ -50,7 +54,6 @@ void ATerrainGenerator::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		Iter->UV.Empty();
 		Iter->Normals.Empty();
 		Iter->VertexColors.Empty();
-
 		Iter->SectionPosition.Empty();
 		Iter->Triangles.Empty();
 	}
@@ -79,7 +82,7 @@ void ATerrainGenerator::GenerateMesh()
 {
 	// Main Function (freezes gamethread with big terrains)
 	InitializeProperties();
-	FillGlobalProperties();
+	FillGlobalVertexData();
 	FillIndexBuffer();
 	SpawnSectionActors();
 }
@@ -89,7 +92,7 @@ void ATerrainGenerator::GenerateMeshTimed()
 {
 	// Main Function alternative (no gamethread freezing but takes some time too)
 	InitializeProperties();
-	FillGlobalPropertiesTimed(); // TODO rename
+	FillGlobalVertexDataTimed(); // TODO rename
 }
 
 
@@ -126,7 +129,6 @@ void ATerrainGenerator::InitializeProperties()
 	SectionPropertiesLOD1.VertexColors.SetNum(LOD1NumVerts, true);
 	URuntimeMeshLibrary::CreateGridMeshTriangles(SectionXYLOD1, SectionXYLOD1, false, OUT SectionPropertiesLOD1.Triangles);
 
-	
 	// Init SectionPropertiesLOD2
 	int32 SectionXYLOD2 = ((SectionXY - 1) / FactorLOD2) + 1;
 	int32 LOD2NumVerts = SectionXYLOD2 * SectionXYLOD2;
@@ -157,16 +159,7 @@ void ATerrainGenerator::InitializeProperties()
 	SectionPropertiesLOD4.VertexColors.SetNum(LOD4NumVerts, true);
 	URuntimeMeshLibrary::CreateGridMeshTriangles(SectionXYLOD4, SectionXYLOD4, false, OUT SectionPropertiesLOD4.Triangles);
 
-
-	UE_LOG(LogTemp, Warning, TEXT("Triangles - LOD0: %i, LOD1: %i, LOD2: %i"), SectionProperties.Triangles.Num(), SectionPropertiesLOD1.Triangles.Num(), SectionPropertiesLOD2.Triangles.Num());
-	UE_LOG(LogTemp, Warning, TEXT("Vertices  - LOD0: %i, LOD1: %i, LOD2: %i"), SectionProperties.Vertices.Num(), SectionPropertiesLOD1.Vertices.Num(), SectionPropertiesLOD2.Vertices.Num());
-	UE_LOG(LogTemp, Warning, TEXT("%i  %i  %i  %i  %i  %i"),
-		SectionProperties.Triangles.Num(),
-		SectionProperties.Vertices.Num(),
-		SectionProperties.VertexColors.Num(),
-		SectionProperties.UV.Num(),
-		SectionProperties.Normals.Num(),
-		SectionProperties.SectionPosition.Num());
+	UE_LOG(LogTemp, Warning, TEXT(" %i %i %i %i %i"), SectionXY, SectionXYLOD1, SectionXYLOD2, SectionXYLOD3, SectionXYLOD4);
 }
 
 
@@ -224,10 +217,9 @@ void ATerrainGenerator::FillIndexBufferTimed()
 		GetActorLocation(),
 		GetActorRotation());
 	SectionActors[SectionIndexIter]->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
-	SectionActors[SectionIndexIter]->InitializeOnSpawn(SectionIndexIter, FVector2D(XComp, YComp), this);
+	SectionActors[SectionIndexIter]->InitializeOnSpawn(SectionIndexIter, this);
 
 	// Create Section
-	//FillSectionVertStruct(SectionIndexIter);
 	SectionActors[SectionIndexIter]->CreateSection();
 
 	// Recursive function call with a timer to prevent freezing of the gamethread
@@ -261,15 +253,13 @@ void ATerrainGenerator::AddBorderVerticesToSectionProperties()
 			}
 
 			SectionProperties.SectionPosition[i] = VertPositionInsideSection;
-			//SectionProperties.VertexColors[i] = (VertPositionInsideSection == ESectionPosition::SB_NotOnBorder) ? (FColor(255, 255, 255, 0.0)) : (FColor(255, 0, 0, 1));
 		}
 	}
 }
 
 
-void ATerrainGenerator::FillGlobalProperties()
+void ATerrainGenerator::FillGlobalVertexData()
 {
-	// Get GlobalProperties Vertex & UV Coordinates
 	int32 i = 0;
 	int32 VertsPerSide = (ComponentXY * SectionXY - (ComponentXY - 1));
 	for (int32 X = 0; X < VertsPerSide; X++)
@@ -277,12 +267,12 @@ void ATerrainGenerator::FillGlobalProperties()
 		for (int32 Y = 0; Y < VertsPerSide; Y++)
 		{
 			FVector VertCoords;
-			FVector Normal = FVector(0, 0, 1);
+			FVector Normal = FVector(0.f, 0.f, 1.f);
 			switch (TerrainZ)
 			{
 			case ETerrainGeneration::TG_Flat:
-				VertCoords = FVector(X * QuadSize, Y * QuadSize, 0);
-				Normal = FVector(0, 0, 1);
+				VertCoords = FVector(X * QuadSize, Y * QuadSize, 0.f);
+				Normal = FVector(0.f, 0.f, 1.f);
 				break;
 
 			case ETerrainGeneration::TG_Noise:
@@ -291,7 +281,7 @@ void ATerrainGenerator::FillGlobalProperties()
 				break;
 
 			case ETerrainGeneration::TG_LineTrace:
-				VertCoords = FVector(X * QuadSize, Y * QuadSize, 0);
+				VertCoords = FVector(X * QuadSize, Y * QuadSize, 0.f);
 				CopyLandscapeHeightBelow(OUT VertCoords, OUT Normal);
 				break;
 			}
@@ -303,7 +293,10 @@ void ATerrainGenerator::FillGlobalProperties()
 			i++;
 		}
 	}
-	FillGlobalNormals();
+	if (TerrainZ == ETerrainGeneration::TG_LineTrace)
+	{
+		FillGlobalNormals();
+	}
 }
 
 
@@ -316,7 +309,7 @@ void ATerrainGenerator::FillGlobalNormals()
 }
 
 
-void ATerrainGenerator::FillGlobalPropertiesTimed()
+void ATerrainGenerator::FillGlobalVertexDataTimed()
 {
 	int32 MeshVertsPerSide = SectionXY * ComponentXY - (ComponentXY - 1);
 	int32 TotalNumOfVerts = MeshVertsPerSide * MeshVertsPerSide;
@@ -326,37 +319,47 @@ void ATerrainGenerator::FillGlobalPropertiesTimed()
 	{
 		int32 X = GlobalXIter;
 		int32 Y = i;
-		int32 PropertiesIndex = X * MeshVertsPerSide + Y;
-		if (!GlobalVertexData.IsValidIndex(PropertiesIndex)) { UE_LOG(LogTemp, Error, TEXT("IndexNotValid")); }
+		int32 Index = X * MeshVertsPerSide + Y;
+		if (!GlobalVertexData.IsValidIndex(Index)) { UE_LOG(LogTemp, Error, TEXT("IndexNotValid")); }
 
-		float QuadCorrection = QuadSize / 100;
-		//Noise Test
-		float Noise;
-		float Octave1 = USimplexNoiseBPLibrary::SimplexNoiseInRange2D(X * Scale1 * QuadCorrection, Y * Scale1 * QuadCorrection, 0, NoiseMultiplier1);
-		float Octave2 = USimplexNoiseBPLibrary::SimplexNoiseInRange2D(X * Scale2 * QuadCorrection, Y * Scale2 * QuadCorrection, 0, NoiseMultiplier2);
-		float Octave3 = USimplexNoiseBPLibrary::SimplexNoiseInRange2D(X * Scale3 * QuadCorrection, Y * Scale3 * QuadCorrection, 0, NoiseMultiplier3);
-		float Octave4 = USimplexNoiseBPLibrary::SimplexNoiseInRange2D(X * Scale4 * QuadCorrection, Y * Scale4 * QuadCorrection, 0, NoiseMultiplier4);
-	
-		Noise = Octave1;
-		Noise += bUseOctave2 ? Octave2 : 0;
-		Noise += bUseOctave3 ? Octave3 : 0;
-		Noise += bUseOctave4 ? Octave4 : 0;
+		FVector VertCoords;
+		FVector Normal = FVector(0.f, 0.f, 1.f);
+		switch (TerrainZ)
+		{
+		case ETerrainGeneration::TG_Flat:
+			VertCoords = FVector(X * QuadSize, Y * QuadSize, 0.f);
+			Normal = FVector(0.f, 0.f, 1.f);
+			break;
 
-		FVector VertCoordsNoise = FVector(X*QuadSize, Y*QuadSize, Noise);
+		case ETerrainGeneration::TG_Noise:
+			VertCoords = FVector(X * QuadSize, Y * QuadSize, GetHeightByNoise(X, Y));
+			Normal = CalculateVertexNormalByNoise(VertCoords / QuadSize);
+			break;
+
+		case ETerrainGeneration::TG_LineTrace:
+			VertCoords = FVector(X * QuadSize, Y * QuadSize, 0.f);
+			CopyLandscapeHeightBelow(OUT VertCoords, OUT Normal);
+			break;
+		}
 
 		// Set Vertex, UV, Normal
-		FVector VertCoords = FVector(X, Y, 0) * QuadSize;
-		//CopyLandscapeHeightBelow(OUT VertCoords, OUT GlobalVertexData[PropertiesIndex].Normals);
-		GlobalVertexData[PropertiesIndex].Vertices	= VertCoordsNoise;
-		GlobalVertexData[PropertiesIndex].UV		= FVector2D(X, Y);
+		GlobalVertexData[Index].Vertices = VertCoords;
+		GlobalVertexData[Index].UV = FVector2D(X, Y);
+		GlobalVertexData[Index].Normals = Normal;
 	}
 
 	UE_LOG(LogTemp, Warning, TEXT("GlobalPropertiesPercentFilled: %f % "), ((float)GlobalXIter/ (float)MeshVertsPerSide) * 100.f);
+	GlobalXIter++;
+
+	// execute following when GlobalVertexData is filled
+	if (GlobalXIter + 1 > MeshVertsPerSide)
+	{
+		//if (TerrainZ == ETerrainGeneration::TG_LineTrace) { FillGlobalNormals(); }
+		FillIndexBufferTimed(); return;
+	}
 
 	// Recursive function call with a timer to prevent freezing of the gamethread
-	GlobalXIter++;
-	if (GlobalXIter + 1 > MeshVertsPerSide) { FillGlobalNormals(); FillIndexBufferTimed(); return; }
-	GetWorld()->GetTimerManager().SetTimer(SectionCreateTimerHandle, this, &ATerrainGenerator::FillGlobalPropertiesTimed, FillVertexDataTimerDelay,false);
+	GetWorld()->GetTimerManager().SetTimer(SectionCreateTimerHandle, this, &ATerrainGenerator::FillGlobalVertexDataTimed, FillVertexDataTimerDelay,false);
 }
 
 
@@ -364,13 +367,13 @@ void ATerrainGenerator::CopyLandscapeHeightBelow(FVector &Coordinates, FVector& 
 {
 	FHitResult Hit;
 	FVector Start = Coordinates + GetActorLocation();
-	FVector End = Start - FVector(0, 0, LineTraceLength);
+	FVector End = Start - FVector(0.f, 0.f, LineTraceLength);
 	
 	GetWorld()->LineTraceSingleByChannel(OUT Hit, Start, End, ECollisionChannel::ECC_WorldStatic);
 
 	float LineTraceHeight = Hit.Location.Z - GetActorLocation().Z + LineTraceHeightOffset;
 	Coordinates = FVector(Coordinates.X, Coordinates.Y, LineTraceHeight);
-	Normal = FVector(0, 0, 1);//(Hit.bBlockingHit) ? Normal = Hit.Normal : Normal = FVector(0, 0, 1);
+	Normal = (Hit.bBlockingHit) ? Normal = Hit.Normal : Normal = FVector(0, 0, 1);
 }
 
 
@@ -390,29 +393,10 @@ void ATerrainGenerator::SpawnSectionActors()
 				GetActorLocation(),
 				GetActorRotation());
 			SectionActors[SectionIndex]->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
-			SectionActors[SectionIndex]->InitializeOnSpawn(SectionIndex, FVector2D(X, Y), this);
+			SectionActors[SectionIndex]->InitializeOnSpawn(SectionIndex, this);
 
 			// Fill SectionProperties and create section inside SectionActor
 			SectionActors[SectionIndex]->CreateSection();
-		}
-	}
-}
-
-
-void ATerrainGenerator::FillSectionVertStruct(int32 SectionIndex)
-{
-	int32 IndexStart = SectionXY * SectionXY * SectionIndex;
-	int32 IndexEnd = IndexStart + (SectionXY * SectionXY);
-	for (int i = 0; i + IndexStart < IndexEnd; i++)
-	{
-		if (SectionProperties.Vertices.IsValidIndex(i))
-		{
-			if (!IndexBuffer.IsValidIndex(i + IndexStart)) { return; }
-			int32 Index = IndexBuffer[i + IndexStart];
-			SectionProperties.Vertices[i]		= GlobalVertexData[Index].Vertices;
-			SectionProperties.Normals[i]		= GlobalVertexData[Index].Normals;
-			SectionProperties.UV[i]				= GlobalVertexData[Index].UV;
-			SectionProperties.VertexColors[i]	= GlobalVertexData[Index].VertexColor;
 		}
 	}
 }
@@ -441,7 +425,6 @@ void ATerrainGenerator::FillSectionVertStructLOD(int32 SectionIndex)
 		IterVertexData.UV			= GlobalVertexData[Index].UV;
 		IterVertexData.VertexColor	= GlobalVertexData[Index].VertexColor;
 
-
 		// Set Vertex Data of all LODs
 		SetLODVertexData(0, i, i, 1, IterVertexData);
 		if (SetLODVertexData(1, i, L1, FactorLOD1, IterVertexData)) { L1++; }
@@ -461,32 +444,30 @@ bool ATerrainGenerator::SetLODVertexData(int32 LOD, int32 LoopIter, int32 Index,
 		LODProperties[LOD]->Normals[Index]		= VertexData.Normals;
 		LODProperties[LOD]->UV[Index]			= VertexData.UV;
 		LODProperties[LOD]->VertexColors[Index]	= VertexData.VertexColor;
-
 		return true;
 	}
 	return false;
 }
 
 
-void ATerrainGenerator::SectionRequestsUpdate(int32 SectionIndex, FSculptSettings SculptSettings, FVector HitLocation, ESculptInput SculptInput, FVector StartLocation)
+void ATerrainGenerator::SectionRequestsUpdate(int32 SectionIndex, const FSculptSettings& Settings, const FSculptInputInfo& InputInfo)
 {
-	MakeCrater(SectionIndex, SculptSettings, HitLocation, SculptInput, StartLocation);
+	MakeCrater(SectionIndex, Settings, InputInfo);
 }
 
 
-void ATerrainGenerator::MakeCrater(int32 SectionIndex, FSculptSettings SculptSettings, FVector HitLocation, ESculptInput SculptInput, FVector StartLocation)
+void ATerrainGenerator::MakeCrater(int32 SectionIndex, const FSculptSettings& Settings, const FSculptInputInfo& InputInfo)
 {	
+	// TODO move all code for sculpting/ updating in seperate class and only keep what's necessary to create section
 	TArray<int32> AffectedSections;
 	TArray<int32> AffectedVertNormals;
-	FVector RelativeHitLocation = (HitLocation - GetActorLocation());
+	FVector RelativeHitLocation = (InputInfo.CurrentLocation - GetActorLocation());
 	FVector CenterCoordinates = FVector(FMath::RoundToInt(RelativeHitLocation.X / QuadSize), FMath::RoundToInt(RelativeHitLocation.Y / QuadSize), 0);
 	int32 VertsPerSide = ((SectionXY - 1) * ComponentXY + 1);
 	int32 CenterIndex = CenterCoordinates.X * VertsPerSide + CenterCoordinates.Y;
-	FVector SectionCoordinates = FVector(SectionIndex / (ComponentXY), SectionIndex % (ComponentXY), 0);
-	int32 ScaledZStrength = MaxZValueOffsetPerUpdate * SculptSettings.ToolStrength;
 
 	// Modify Verts around given radius
-	int32 RadiusInVerts = SculptSettings.SculptRadius / QuadSize;
+	int32 RadiusInVerts = Settings.SculptRadius / QuadSize;
 	int32 RadiusExtended = RadiusInVerts + 1;
 
 	for (int32 X = -RadiusExtended; X <= RadiusExtended; X++)
@@ -504,100 +485,42 @@ void ATerrainGenerator::MakeCrater(int32 SectionIndex, FSculptSettings SculptSet
 			float DistanceFromCenter = FVector::Dist(CenterCoordinates, CurrentVertCoords);
 
 			// affected normals are added to array, and calculated after loop
-			if (DistanceFromCenter > RadiusExtended) { CalculateVertexNormal(CurrentIndex); continue; }
+			if (DistanceFromCenter > RadiusExtended) { /*CalculateVertexNormal(CurrentIndex);*/ continue; }
 			AffectedVertNormals.Add(CurrentIndex);
 
 			// Check real radius
-			if (DistanceFromCenter > RadiusInVerts) { CalculateVertexNormal(CurrentIndex); continue; }
+			if (DistanceFromCenter > RadiusInVerts) { /*CalculateVertexNormal(CurrentIndex);*/ continue; }
 
 
-			if (SculptInput != ESculptInput::ST_Stopped)
+			// execute selected sculpt function for each vertex in radius
+			if (InputInfo.SculptInput != ESculptInput::ST_Stopped)
 			{
 				float DistanceFraction = DistanceFromCenter / RadiusInVerts;
-				float Alpha;
-				float ZValue = 0;
-
-				switch (SculptSettings.SculptMode) // TODO maybe change switch statement to ifs, or add a additive/subtractive bool or enum as input parameter 
+				switch (Settings.SculptMode)
 				{
-				case ESculptMode::ST_Lower:
-				{
-					Alpha = Curve->GetFloatValue(DistanceFraction) * SculptSettings.Falloff;
-					ZValue = FMath::Lerp(ScaledZStrength, 0, Alpha);
-					GlobalVertexData[CurrentIndex].Vertices -= FVector(0, 0, ZValue);
+				case ESculptMode::ST_Sculpt:
+					VertexChangeHeight(CurrentIndex, DistanceFraction, Settings);
 					break;
-				}
 
-				case ESculptMode::ST_Raise:
-				{
-					Alpha = Curve->GetFloatValue(DistanceFraction) * SculptSettings.Falloff;
-					ZValue = FMath::Lerp(ScaledZStrength, 0, Alpha);
-					GlobalVertexData[CurrentIndex].Vertices += FVector(0, 0, ZValue);
+				case ESculptMode::ST_Flatten:
+					VertexFlatten(CurrentIndex, DistanceFraction, Settings, InputInfo);
 					break;
-				}
 
-				case ESculptMode::ST_Flatten: // TODO fix center index issue
-				{
-					Alpha = Curve->GetFloatValue(DistanceFraction) * SculptSettings.Falloff;
-					ZValue = FMath::Lerp(StartLocation.Z, GlobalVertexData[CurrentIndex].Vertices.Z, Alpha);
-					float ZValue2 = FMath::Lerp(GlobalVertexData[CurrentIndex].Vertices.Z, ZValue, SculptSettings.ToolStrength);
-					FVector Flatted = FVector(GlobalVertexData[CurrentIndex].Vertices.X, GlobalVertexData[CurrentIndex].Vertices.Y, ZValue2);
-					GlobalVertexData[CurrentIndex].Vertices = Flatted;
+				case ESculptMode::ST_Paint:
+					VertexPaint(CurrentIndex, DistanceFraction, Settings);
 					break;
-				}
 
-				case ESculptMode::ST_PaintAdditive:
-				{
-					Alpha = Curve->GetFloatValue(DistanceFraction) * SculptSettings.Falloff;
-					uint8 R = FMath::Lerp(SculptSettings.Color.R, (uint8)0, Alpha);
-					uint8 G = FMath::Lerp(SculptSettings.Color.G, (uint8)0, Alpha);
-					uint8 B = FMath::Lerp(SculptSettings.Color.B, (uint8)0, Alpha);
-					uint8 A = FMath::Lerp(SculptSettings.Color.A, (uint8)0, Alpha);
-
-					FColor ColorWithFalloff = FColor(R, G, B, A);
-
-					GlobalVertexData[CurrentIndex].VertexColor = CombineColorsClamped(GlobalVertexData[CurrentIndex].VertexColor, ColorWithFalloff);
+				case ESculptMode::ST_Noise:
+					VertexAddNoise(CurrentIndex, DistanceFraction, Settings);
 					break;
-				}
-				case ESculptMode::ST_PaintSubtractive:
-				{
-					Alpha = Curve->GetFloatValue(DistanceFraction) * SculptSettings.Falloff;
-					uint8 R = FMath::Lerp(SculptSettings.Color.R, (uint8)0, Alpha);
-					uint8 G = FMath::Lerp(SculptSettings.Color.G, (uint8)0, Alpha);
-					uint8 B = FMath::Lerp(SculptSettings.Color.B, (uint8)0, Alpha);
-					uint8 A = FMath::Lerp(SculptSettings.Color.A, (uint8)0, Alpha);
 
-					FColor ColorWithFalloff = FColor(R, G, B, A);
-
-					GlobalVertexData[CurrentIndex].VertexColor = ColorSubtract(GlobalVertexData[CurrentIndex].VertexColor, ColorWithFalloff);
+				case ESculptMode::ST_Smooth:
+					VertexSmooth(CurrentIndex, DistanceFraction, Settings);
 					break;
-				}
-
-				case ESculptMode::ST_NoiseAdditive:
-				{
-					float QuadCorrection = QuadSize / 100;
-					float Noise = USimplexNoiseBPLibrary::SimplexNoiseInRange2D(CurrentVertCoords.X * Scale4 * QuadCorrection, CurrentVertCoords.Y * Scale4 * QuadCorrection, 0, NoiseMultiplier4);
-
-					Alpha = Curve->GetFloatValue(DistanceFraction) * SculptSettings.Falloff;
-					ZValue = FMath::Lerp((int32)Noise, 0, Alpha);
-
-					GlobalVertexData[CurrentIndex].Vertices += FVector(0, 0, ZValue);
-					break;
-				}
-
-				case ESculptMode::ST_NoiseSubtractive:
-				{
-					float QuadCorrection = QuadSize / 100;
-					float Noise = USimplexNoiseBPLibrary::SimplexNoiseInRange2D(CurrentVertCoords.X * Scale4 * QuadCorrection, CurrentVertCoords.Y * Scale4 * QuadCorrection, 0, NoiseMultiplier4);
-
-					Alpha = Curve->GetFloatValue(DistanceFraction) * SculptSettings.Falloff;
-					ZValue = FMath::Lerp((int32)Noise, 0, Alpha);
-
-					GlobalVertexData[CurrentIndex].Vertices -= FVector(0, 0, ZValue);
-					break;
-				}
-
 				}
 			}
+
+			FVector SectionCoordinates = FVector(SectionIndex / (ComponentXY), SectionIndex % (ComponentXY), 0);
 
 			FVector SectionVertCoords = CurrentVertCoords - (SectionCoordinates * SectionXY - SectionCoordinates);
 			int32 SectionVertIndex = SectionVertCoords.X * SectionXY + SectionVertCoords.Y;
@@ -609,18 +532,17 @@ void ATerrainGenerator::MakeCrater(int32 SectionIndex, FSculptSettings SculptSet
 		}
 	}
 
-	// Update Normals
+	// Update affected Normals
 	for (int32 Vert : AffectedVertNormals)
 	{
 		GlobalVertexData[Vert].Normals = CalculateVertexNormal(Vert);
 	}
-	//UE_LOG(LogTemp, Error, TEXT("ExtendedRadius Num of Verts: %i"), AffectedVertNormals.Num());
 
-
+	// Update section directly or via Queue
 	for (int32 Iter : AffectedSections)
 	{
 		if (!SectionActors.IsValidIndex(Iter)) { continue; }
-		(SculptSettings.bUseUpdateQueue && !SectionUpdateQueue.Contains(Iter)) ? (SectionUpdateQueue.Add(Iter)) : (SectionActors[Iter]->UpdateSection());
+		(Settings.bUseUpdateQueue && !SectionUpdateQueue.Contains(Iter)) ? (SectionUpdateQueue.Add(Iter)) : (SectionActors[Iter]->UpdateSection());
 	}
 }
 
@@ -709,7 +631,7 @@ FVector ATerrainGenerator::CalculateVertexNormal(int32 VertexIndex)
 	int32 R = VertexIndex + 1;
 	int32 L = VertexIndex - 1;
 
-	if (L < 0 || D < 0 || U >= GlobalVertexData.Num() || R >= GlobalVertexData.Num()) { return FVector(0, 0, 0); }
+	if (L < 0 || D < 0 || U >= GlobalVertexData.Num() || R >= GlobalVertexData.Num()) { return FVector(0.f, 0.f, 0.f); }
 
 	FVector X = GlobalVertexData[U].Vertices - GlobalVertexData[D].Vertices;
 	FVector Y = GlobalVertexData[R].Vertices - GlobalVertexData[L].Vertices;
@@ -720,10 +642,10 @@ FVector ATerrainGenerator::CalculateVertexNormal(int32 VertexIndex)
 
 FVector ATerrainGenerator::CalculateVertexNormalByNoise(FVector Coordinates)
 {
-	FVector ULoc = FVector((Coordinates.X + 1) * QuadSize, Coordinates.Y * QuadSize, GetHeightByNoise(Coordinates.X + 1, Coordinates.Y));
-	FVector DLoc = FVector((Coordinates.X - 1) * QuadSize, Coordinates.Y * QuadSize, GetHeightByNoise(Coordinates.X - 1, Coordinates.Y));
-	FVector RLoc = FVector(Coordinates.X * QuadSize, (Coordinates.Y + 1) * QuadSize, GetHeightByNoise(Coordinates.X, Coordinates.Y + 1));
-	FVector LLoc = FVector(Coordinates.X * QuadSize, (Coordinates.Y - 1) * QuadSize, GetHeightByNoise(Coordinates.X, Coordinates.Y - 2));
+	FVector ULoc = FVector((Coordinates.X + 1.f) * QuadSize, Coordinates.Y * QuadSize, GetHeightByNoise(Coordinates.X + 1.f, Coordinates.Y));
+	FVector DLoc = FVector((Coordinates.X - 1.f) * QuadSize, Coordinates.Y * QuadSize, GetHeightByNoise(Coordinates.X - 1.f, Coordinates.Y));
+	FVector RLoc = FVector(Coordinates.X * QuadSize, (Coordinates.Y + 1.f) * QuadSize, GetHeightByNoise(Coordinates.X, Coordinates.Y + 1.f));
+	FVector LLoc = FVector(Coordinates.X * QuadSize, (Coordinates.Y - 1.f) * QuadSize, GetHeightByNoise(Coordinates.X, Coordinates.Y - 1.f));
 
 
 	FVector X = ULoc - DLoc;
@@ -735,18 +657,18 @@ FVector ATerrainGenerator::CalculateVertexNormalByNoise(FVector Coordinates)
 
 float ATerrainGenerator::GetHeightByNoise(int32 XCoords, int32 YCoords)
 {
-	float QuadCorrection = QuadSize / 100;
+	float QuadCorrection = QuadSize / 100.f;
 	float Noise;
 
-	float Octave1 = USimplexNoiseBPLibrary::SimplexNoiseInRange2D(XCoords * Scale1 * QuadCorrection, YCoords * Scale1 * QuadCorrection, 0, NoiseMultiplier1);
-	float Octave2 = USimplexNoiseBPLibrary::SimplexNoiseInRange2D(XCoords * Scale2 * QuadCorrection, YCoords * Scale2 * QuadCorrection, 0, NoiseMultiplier2);
-	float Octave3 = USimplexNoiseBPLibrary::SimplexNoiseInRange2D(XCoords * Scale3 * QuadCorrection, YCoords * Scale3 * QuadCorrection, 0, NoiseMultiplier3);
-	float Octave4 = USimplexNoiseBPLibrary::SimplexNoiseInRange2D(XCoords * Scale4 * QuadCorrection, YCoords * Scale4 * QuadCorrection, 0, NoiseMultiplier4);
+	float Octave1 = USimplexNoiseBPLibrary::SimplexNoiseInRange2D(XCoords / Scale1 * QuadCorrection, YCoords / Scale1 * QuadCorrection, 0.f, NoiseMultiplier1);
+	float Octave2 = USimplexNoiseBPLibrary::SimplexNoiseInRange2D(XCoords / Scale2 * QuadCorrection, YCoords / Scale2 * QuadCorrection, 0.f, NoiseMultiplier2);
+	float Octave3 = USimplexNoiseBPLibrary::SimplexNoiseInRange2D(XCoords / Scale3 * QuadCorrection, YCoords / Scale3 * QuadCorrection, 0.f, NoiseMultiplier3);
+	float Octave4 = USimplexNoiseBPLibrary::SimplexNoiseInRange2D(XCoords / Scale4 * QuadCorrection, YCoords / Scale4 * QuadCorrection, 0.f, NoiseMultiplier4);
 
 	Noise = Octave1;
-	Noise += bUseOctave2 ? Octave2 : 0;
-	Noise += bUseOctave3 ? Octave3 : 0;
-	Noise += bUseOctave4 ? Octave4 : 0;
+	Noise += bUseOctave2 ? Octave2 : 0.f;
+	Noise += bUseOctave3 ? Octave3 : 0.f;
+	Noise += bUseOctave4 ? Octave4 : 0.f;
 
 	return Noise;
 }
@@ -777,55 +699,134 @@ FColor ATerrainGenerator::ColorSubtract(FColor A, FColor B)
 }
 
 
-FColor ATerrainGenerator::CombineColorsClamped(FColor A, FColor B)
+void ATerrainGenerator::VertexPaint(int32 VertexIndex, float DistanceFraction, const FSculptSettings& Settings)
 {
-	// find the strongest layer from B. Only the strongest will be considered for painting
-	TArray<uint8> RGBA;
-	RGBA.Add(B.R);
-	RGBA.Add(B.G);
-	RGBA.Add(B.B);
-	RGBA.Add(B.A);
+	FColor CurrentVertexColor = GlobalVertexData[VertexIndex].VertexColor;
 
-	uint8 Temp = 0;
-	uint8 Index;
-	for (int32 i = 0; i < RGBA.Num(); i++)
+	// scale Input color
+	float LerpAlpha = Curve->GetFloatValue(DistanceFraction) * Settings.Falloff;
+	uint8 R = FMath::Lerp(Settings.Color.R, (uint8)0, LerpAlpha) * Settings.ToolStrength;
+	uint8 G = FMath::Lerp(Settings.Color.G, (uint8)0, LerpAlpha) * Settings.ToolStrength;
+	uint8 B = FMath::Lerp(Settings.Color.B, (uint8)0, LerpAlpha) * Settings.ToolStrength;
+	uint8 A = FMath::Lerp(Settings.Color.A, (uint8)0, LerpAlpha) * Settings.ToolStrength;
+	FColor InputColorScaled = FColor(R, G, B, A);
+
+	if (Settings.bInvertToolDirection)
 	{
-		if (RGBA[i] > Temp)
+		GlobalVertexData[VertexIndex].VertexColor = ColorSubtract(CurrentVertexColor, InputColorScaled);
+	}
+	else
+	{
+		// find the strongest layer from ColorF. Only the strongest will be considered for painting
+		TArray<uint8> RGBA;
+		RGBA.Add(InputColorScaled.R);
+		RGBA.Add(InputColorScaled.G);
+		RGBA.Add(InputColorScaled.B);
+		RGBA.Add(InputColorScaled.A);
+
+		uint8 Temp = 0;
+		uint8 Index = 0;
+		for (int32 i = 0; i < RGBA.Num(); i++)
 		{
-			Temp = RGBA[i];
-			Index = i;
+			if (RGBA[i] > Temp)
+			{
+				Temp = RGBA[i];
+				Index = i;
+			}
 		}
+
+		// check if all layers combined reached the max value of 255
+		FColor TempColor = CombineColors(CurrentVertexColor, InputColorScaled);
+		int32 Value = TempColor.R + TempColor.G + TempColor.B + TempColor.A;
+		bool bRemove = (Value > 255) ? true : false;
+
+		uint8 Red, Green, Blue, Alpha;
+
+		// reduce paint on unused layers equally to make room for painting on selected layer
+		if (bRemove)
+		{
+			int32 ToRemove = (Value - 255) / 3; // TODO if CurrentVertColor RGB or A is already 0, remove from other 2 layers to make enought room for painted color
+
+			Red		= (Index == 0) ? 0 : ToRemove;
+			Green	= (Index == 1) ? 0 : ToRemove;
+			Blue	= (Index == 2) ? 0 : ToRemove;
+			Alpha	= (Index == 3) ? 0 : ToRemove;
+			TempColor = ColorSubtract(CurrentVertexColor, FColor(Red, Green, Blue, Alpha));
+		}
+
+		// Paint selected layer
+		Red		= (Index == 0) ? InputColorScaled.R : 0;
+		Green	= (Index == 1) ? InputColorScaled.G : 0;
+		Blue	= (Index == 2) ? InputColorScaled.B : 0;
+		Alpha	= (Index == 3) ? InputColorScaled.A : 0;
+		TempColor = bRemove ? TempColor : CurrentVertexColor;
+
+		FColor EndResult = CombineColors(TempColor, FColor(Red, Green, Blue, Alpha));
+		GlobalVertexData[VertexIndex].VertexColor = EndResult;
 	}
+}
 
-	// check if all layers combined reached the max value of 255
-	FColor TempColor = CombineColors(A, B);
-	int32 Value = TempColor.R + TempColor.G + TempColor.B + TempColor.A;
-	bool bRemove = (Value > 255) ? true : false;
-	int32 ToRemove = (Value -255) / 3;
 
-	uint8 Red;
-	uint8 Green;
-	uint8 Blue;
-	uint8 Alpha;
+void ATerrainGenerator::VertexSmooth(int32 VertexIndex, float DistanceFraction, const FSculptSettings& Settings)
+{
+	int32 VertsPerSide = (ComponentXY * SectionXY - (ComponentXY - 1));
+	int32 U = VertexIndex + VertsPerSide;
+	int32 D = VertexIndex - VertsPerSide;
+	int32 R = VertexIndex + 1;
+	int32 L = VertexIndex - 1;
 
-	// reduce paint on unused layers equally to make room for painting on used layer
-	if (bRemove)
-	{
-		Red		= (Index == 0) ? 0 : ToRemove;
-		Green	= (Index == 1) ? 0 : ToRemove;
-		Blue	= (Index == 2) ? 0 : ToRemove;
-		Alpha	= (Index == 3) ? 0 : ToRemove;
-		TempColor = ColorSubtract(A, FColor(Red, Green, Blue, Alpha));
-	}
+	if (L < 0 || D < 0 || U >= GlobalVertexData.Num() || R >= GlobalVertexData.Num()) { return; }
 
-	// Paint used layer
-	Red		= (Index == 0) ? B.R : 0;
-	Green	= (Index == 1) ? B.G : 0;
-	Blue	= (Index == 2) ? B.B : 0;
-	Alpha	= (Index == 3) ? B.A : 0;
+	// get  Z distance from Vertex to Z average of neighbours
+	float Average = (GlobalVertexData[U].Vertices + GlobalVertexData[D].Vertices + GlobalVertexData[R].Vertices + GlobalVertexData[L].Vertices).Z / 4.f;
+	float ZOffset = (FVector(0.f, 0.f, Average) - FVector(0.f, 0.f, GlobalVertexData[VertexIndex].Vertices.Z)).Size();
 
-	TempColor = bRemove ? TempColor : A;
-	FColor EndResult = CombineColors(TempColor, FColor(Red, Green, Blue, Alpha));
+	// scale Offset according to user sculpt settings
+	float Alpha = Curve->GetFloatValue(DistanceFraction) * Settings.Falloff;
+	ZOffset = FMath::Lerp(ZOffset, 0.f, Alpha) * Settings.ToolStrength;
 
-	return EndResult;
+	// check if vertex has to be lowered or raised 
+	bool bToRaise = GlobalVertexData[VertexIndex].Vertices.Z < Average;
+	ZOffset = bToRaise ? (ZOffset) : -(ZOffset);
+
+	GlobalVertexData[VertexIndex].Vertices += FVector(0.f, 0.f, ZOffset);
+}
+
+
+void ATerrainGenerator::VertexChangeHeight(int32 VertexIndex, float DistanceFraction, const FSculptSettings& Settings)
+{
+	float ScaledZStrength = MaxZValueOffsetPerUpdate * Settings.ToolStrength;
+	float Alpha = Curve->GetFloatValue(DistanceFraction) * Settings.Falloff;
+	float ZValue = FMath::Lerp(ScaledZStrength, 0.f, Alpha);
+
+	GlobalVertexData[VertexIndex].Vertices += (Settings.bInvertToolDirection) ? (FVector(0.f, 0.f, -ZValue)) : (FVector(0.f, 0.f, ZValue));
+}
+
+
+void ATerrainGenerator::VertexFlatten(int32 VertexIndex, float DistanceFraction, const FSculptSettings& Settings, const FSculptInputInfo& InputInfo)
+{
+	float Alpha = Curve->GetFloatValue(DistanceFraction) * Settings.Falloff;
+	float StartLocationHight = InputInfo.StartLocation.Z - GetActorLocation().Z;
+	float ZValue = FMath::Lerp(StartLocationHight, GlobalVertexData[VertexIndex].Vertices.Z, Alpha);
+
+	float ZValue2 = FMath::Lerp(GlobalVertexData[VertexIndex].Vertices.Z, ZValue, Settings.ToolStrength);
+	FVector Flatted = FVector(GlobalVertexData[VertexIndex].Vertices.X, GlobalVertexData[VertexIndex].Vertices.Y, ZValue2);
+
+	GlobalVertexData[VertexIndex].Vertices = Flatted;
+}
+
+
+void ATerrainGenerator::VertexAddNoise(int32 VertexIndex, float DistanceFraction, const FSculptSettings& Settings)
+{
+	int32 VertsPerSide = (ComponentXY * SectionXY - (ComponentXY - 1));
+	int32 X = VertexIndex / VertsPerSide;
+	int32 Y = VertexIndex % VertsPerSide;
+
+	float QuadCorrection = QuadSize / 100.f;
+	float Noise = USimplexNoiseBPLibrary::SimplexNoiseInRange2D((X  * QuadCorrection) / Settings.NoiseScale, (Y * QuadCorrection) / Settings.NoiseScale, 0.f, MaxZValueOffsetPerUpdate) * Settings.ToolStrength;
+
+	float Alpha = Curve->GetFloatValue(DistanceFraction) * Settings.Falloff;
+	float ZValue = FMath::Lerp(Noise, 0.f, Alpha);
+
+	GlobalVertexData[VertexIndex].Vertices += (Settings.bInvertToolDirection) ? (FVector(0.f, 0.f, -ZValue)) : (FVector(0.f, 0.f, ZValue));
 }

@@ -7,41 +7,22 @@
 
 USculptComponent::USculptComponent()
 {
-	bWantsBeginPlay = true;
-	PrimaryComponentTick.bCanEverTick = true;
+	bWantsBeginPlay = false;
+	PrimaryComponentTick.bCanEverTick = false;
 }
 
 
-
-void USculptComponent::BeginPlay()
+void USculptComponent::SculptStart()
 {
-	Super::BeginPlay();
-}
-
-
-void USculptComponent::TickComponent( float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction )
-{
-	Super::TickComponent( DeltaTime, TickType, ThisTickFunction );
-
-	FHitResult Hit;
-	if (GetHitResult(OUT Hit))
-	{
-		CurrentSculptLocation = Hit.Location;
-	}
-}
-
-
-void USculptComponent::SculptStart(UCameraComponent* Camera)
-{
-	OwnerCamera = Camera;
-	SculptInput = ESculptInput::ST_Started;
+	InputInfo.SculptInput = ESculptInput::ST_Started;
+	InputInfo.StartLocation = HitResultOwner.Location;
 	GetWorld()->GetTimerManager().SetTimer(SculptTimerHandle, this, &USculptComponent::Sculpt, GetWorld()->DeltaTimeSeconds, true);
 }
 
 
 void USculptComponent::SculptStop()
 {
-	SculptInput = ESculptInput::ST_Stopped;
+	InputInfo.SculptInput = ESculptInput::ST_Stopped;
 	GetWorld()->GetTimerManager().PauseTimer(SculptTimerHandle);
 	Sculpt();
 }
@@ -49,47 +30,22 @@ void USculptComponent::SculptStop()
 
 void USculptComponent::Sculpt()
 {
-	FHitResult Hit;
-	if (!GetHitResult(OUT Hit)) { return; }
-	if (InSleepDistance(Hit.Location) && (SculptInput != ESculptInput::ST_Stopped)) { return; }
+	InputInfo.CurrentLocation = HitResultOwner.Location;
+	if (InSleepDistance()) { return; }
+	if (InputInfo.SculptInput == ESculptInput::ST_Stopped) { return; }
 
 	// Cast to owner of hit section
-	ATerrainSection* HitSection = dynamic_cast<ATerrainSection*>(Hit.GetActor());
+	ATerrainSection* HitSection = dynamic_cast<ATerrainSection*>(HitResultOwner.GetActor());
 	if (!HitSection) { return; }
 
-	if (SculptInput == ESculptInput::ST_Started) 
-	{ 
-		StartLocation = Hit.Location - HitSection->GetActorLocation(); 
-		HitSection->RequestSculpting(SculptSettings, Hit.Location, SculptInput, StartLocation);
-		SculptInput = ESculptInput::ST_Ongoing;
-	}
-	else
-	{
-		HitSection->RequestSculpting(SculptSettings, Hit.Location, SculptInput, StartLocation);
-	}
+	HitSection->RequestSculpting(SculptSettings, InputInfo);
+	if (InputInfo.SculptInput == ESculptInput::ST_Started) { InputInfo.SculptInput = ESculptInput::ST_Ongoing; }
 }
 
 
-bool USculptComponent::GetHitResult(FHitResult &Hit)
+bool USculptComponent::InSleepDistance()
 {
-	if (bUseMouseMode)
-	{
-		GetWorld()->GetFirstPlayerController()->GetHitResultUnderCursor(ECollisionChannel::ECC_WorldStatic, true, OUT Hit); // TODO get controller through owner reference
-	}
-	else if (OwnerCamera)
-	{
-		FVector Start = OwnerCamera->GetComponentLocation();
-		FVector End = Start + (OwnerCamera->GetForwardVector() * InteractionDistance);
-		GetWorld()->LineTraceSingleByChannel(OUT Hit, Start, End, ECollisionChannel::ECC_WorldStatic);
-	}
-	return Hit.bBlockingHit;
-}
-
-
-bool USculptComponent::InSleepDistance(FVector CurrentLocation)
-{
-	CurrentLocation *= FVector(1, 1, 1);
-	if (FVector::Dist(LastLocation, CurrentLocation) < SleepDistance) { return true; }
-	LastLocation =  CurrentLocation;
+	if (FVector::Dist(InputInfo.LastLocation, InputInfo.CurrentLocation) < SleepDistance) { return true; }
+	InputInfo.LastLocation = InputInfo.CurrentLocation;
 	return false;
 }
