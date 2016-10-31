@@ -24,6 +24,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Sculpting")
 	void SculptStop();
 
+	// Use this if you want to implement sculpt behaviour yourself.
+	UFUNCTION(BlueprintCallable, Category = "Sculpting")
+	bool SculptSingle(FSculptInputInfo InputInfo);
+
 	// Has to be called from owner class
 	UFUNCTION(BlueprintCallable, Category = "Sculpting")
 	void SetHitResult(FHitResult HitResult) { HitResultOwner = HitResult; }

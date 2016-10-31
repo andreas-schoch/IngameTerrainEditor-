@@ -15,7 +15,7 @@ ATerrainSection::ATerrainSection()
 	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
 	RootComponent = SceneRoot;
 
-	// LOD0 
+	// LOD0   TODO add all LOD components dynamically 
 	RuntimeMeshComponent = CreateDefaultSubobject<URuntimeMeshComponent>(TEXT("RuntimeMeshComponent"));
 	RuntimeMeshComponent->SetupAttachment(RootComponent);
 	RuntimeMeshLODs.Add(RuntimeMeshComponent);

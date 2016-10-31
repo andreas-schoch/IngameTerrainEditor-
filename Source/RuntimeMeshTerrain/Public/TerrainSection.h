@@ -72,10 +72,6 @@ private:
 	TArray<URuntimeMeshComponent*> RuntimeMeshLODs;
 
 
-
-
-	ATerrainGenerator* OwningTerrain = nullptr;
-
 	APlayerController* PlayerControllerReference = nullptr;
 
 	int32 SectionIndexLocal = 0;
@@ -83,5 +79,8 @@ private:
 	TArray<int32> IndexBufferLocal;
 
 	FTimerHandle VisibilityTimerHandle;
-};
 
+protected:
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sculpting")
+	ATerrainGenerator* OwningTerrain = nullptr;
+};

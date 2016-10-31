@@ -452,11 +452,11 @@ bool ATerrainGenerator::SetLODVertexData(int32 LOD, int32 LoopIter, int32 Index,
 
 void ATerrainGenerator::SectionRequestsUpdate(int32 SectionIndex, const FSculptSettings& Settings, const FSculptInputInfo& InputInfo)
 {
-	MakeCrater(SectionIndex, Settings, InputInfo);
+	ModifyTerrain(SectionIndex, Settings, InputInfo);
 }
 
 
-void ATerrainGenerator::MakeCrater(int32 SectionIndex, const FSculptSettings& Settings, const FSculptInputInfo& InputInfo)
+void ATerrainGenerator::ModifyTerrain(int32 SectionIndex, const FSculptSettings& Settings, const FSculptInputInfo& InputInfo)
 {	
 	// TODO move all code for sculpting/ updating in seperate class and only keep what's necessary to create section
 	TArray<int32> AffectedSections;

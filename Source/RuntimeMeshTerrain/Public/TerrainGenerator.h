@@ -194,7 +194,7 @@ private:
 
 	void SpawnSectionActors();
 
-	void MakeCrater(int32 SectionIndex, const FSculptSettings& Settings, const FSculptInputInfo& InputInfo);
+	void ModifyTerrain(int32 SectionIndex, const FSculptSettings& Settings, const FSculptInputInfo& InputInfo);
 
 	FVector CalculateVertexNormal(int32 VertexIndex);
 

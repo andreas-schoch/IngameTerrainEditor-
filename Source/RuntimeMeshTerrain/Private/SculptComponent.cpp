@@ -28,6 +28,17 @@ void USculptComponent::SculptStop()
 }
 
 
+bool USculptComponent::SculptSingle(FSculptInputInfo InputInfo)
+{
+	// Cast to owner of hit section
+	ATerrainSection* HitSection = dynamic_cast<ATerrainSection*>(HitResultOwner.GetActor());
+	if (!HitSection) { return false; }
+
+	HitSection->RequestSculpting(SculptSettings, InputInfo);
+	return true;
+}
+
+
 void USculptComponent::Sculpt()
 {
 	InputInfo.CurrentLocation = HitResultOwner.Location;
