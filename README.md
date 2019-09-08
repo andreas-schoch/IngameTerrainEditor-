@@ -1,15 +1,17 @@
 # TerrainEditor UE4
 
-Prototyping an Ingame TerrainEditor using the ProceduralMeshComponent or the RuntimeMeshComponent.
-Still in early developement stage.
+An Ingame TerrainEditor that works with the ProceduralMeshComponent or the RuntimeMeshComponent.
+Made with C++. API exposed via Blueprints.
+
+[![IMAGE ALT TEXT HERE](terraineditor.jpg)](http://www.youtube.com/watch?v=XmK6og7Xr6Q)
 
 [Forum Thread](https://forums.unrealengine.com/showthread.php?124395-Ingame-TerrainEditor-(with-Source))
 
 
 ####Getting Started:
-- Download the RuntimeMeshComponent from the ue4 Marketplace or from GitHub
+- Make sure you have the RuntimeMeshComponent installed
 - Clone or Download this project
-- Rightclick uproject, select "Generate Visual Studio project files"
+- Right click the uproject, select "Generate Visual Studio project files"
 - Open the generated sln file, build it.
 - launch unreal engine 
 
