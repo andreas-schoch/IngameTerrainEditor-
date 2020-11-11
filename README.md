@@ -1,7 +1,8 @@
 # TerrainEditor UE4
-## Update Notice 2019: 
-This project came to an abrupt halt around the end of 2016 when I lost alot of uncommited progress due to multiple harddrive failures. Since then I was able to restore some of the functionality. It's not alot and needs some refactoring but it will be released by the end of 2019 (including some documentation on how to use the Bluprint exposed API and how to setup your material to make it vertex paintable). \
-Also for the people asking me for the license terms. I will re-release the project as a plugin with the MIT license. The main reason this hasn't happened yet are uncertainties regarding the inclusion of Epic Games example content textures. \
+## Update Notice 2020/2021: 
+This project came to an abrupt halt around the end of 2016 when I lost alot of uncommited progress due to multiple harddrive failures. Since then I was able to restore some of the functionality. The main difference between what is currently on github, is that the "terrain sections" (see terrainSection.cpp) were replaced with a clipmap based approach (see: https://developer.nvidia.com/gpugems/gpugems2/part-i-geometric-complexity/chapter-2-terrain-rendering-using-gpu-based-geometry) that allows the rendering of near infinite terrain. I planned to re-release this demo project as a reusable plugin, but couldn't be bothered to fix some of the projects architectural flaws yet.
+Also for the people asking me for the license terms, feel free to use it however you like. This demo will give you a good idea on how to implement a terrain that can be edited during runtime but be aware that it was **not** created by a professional (and by now it might already be possible to edit the real landscape component during runtime without editing UE4's source code).
+
 
 ### About
 - A set of components that makes terrain manipulation from within the game possible.
